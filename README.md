@@ -6,7 +6,27 @@ This project will use public MLB Statcast data to compare forecasts based on pas
 
 ## Status
 
-Research outline. Data collection, model training, backtesting, and the application have not started. The first milestone is a reproducible forecasting experiment; the interface follows once there are results to explain.
+The data pipeline and model code are written; no results yet. 2020-2023 Statcast data has been downloaded and the 2021-2023 forecast rows build and pass hand checks against published season totals. Next is the 2024-2025 download and the first 2024 validation run. The interface follows once there are results to explain.
+
+## Running it
+
+Requires [uv](https://docs.astral.sh/uv/). Downloaded data and outputs stay in the gitignored `data/` and `artifacts/` folders.
+
+```bash
+uv run python -m pcf.ingest      # Statcast pitches, 2020 (history only) through 2025; resumes from saved chunks
+uv run python -m pcf.dataset     # one row per pitcher per Monday forecast date
+uv run python -m pcf.model       # fit A/B/C, tune and score on 2024
+uv run python -m pcf.model --final   # score the 2025 holdout once
+```
+
+The full download is about 270 requests and takes roughly 90 minutes. Keep the machine awake (`caffeinate -i` on macOS); a sleeping laptop stalls it.
+
+## Definitions in the code
+
+- Batters faced excludes intentional walks and truncated plate appearances. K includes strikeout double plays. BB counts unintentional walks only.
+- Forecasts are made each Monday whose full 30-day window ends inside the regular season. Eligible pitchers faced at least 50 batters in the prior 60 days and pitched within the prior 14.
+- Opponent quality: batters already faced are rated by their shrunk K% and BB% as of the day before each game; upcoming opponents are the teams on the pitcher's schedule for the next 30 days, rated as of the forecast date. The schedule is taken from games actually played, so postponed games that were never made up inside the window are missing.
+- Model B sees only the last 30 days of pitch characteristics. Model C adds the earlier baseline window (days 31-120, or the prior season when that window has fewer than 150 pitches) and the change from it. Otherwise a linear model given both windows could reconstruct the change itself.
 
 ## Baseball question
 
@@ -74,11 +94,11 @@ A ranked pitcher watchlist with next-month forecasts, uncertainty, and the diffe
 
 ## Next session
 
-1. Audit a small Statcast download and identify missing fields, pitch classifications, and unique pitch and plate-appearance keys.
-2. Finalize forecast dates, eligibility, treatment of intentional walks, and end-of-season follow-up.
-3. Build a dataset containing only information available at each forecast date and verify a few rows manually.
-4. Establish Model A, then compare B and C under the same evaluation protocol.
-5. Review results and failure cases before building the watchlist interface.
+1. Finish the 2024-2025 download and check every chunk's row count for gaps.
+2. Build the full dataset and hand-check a few 2024 rows.
+3. Run the 2024 validation comparison of A, B, and C; review calibration and failure cases.
+4. Chart the C-versus-B result with its uncertainty.
+5. Score the 2025 holdout once, then start the watchlist interface.
 
 ## Related work
 
