@@ -2,24 +2,50 @@
 
 Do recent changes in a pitcher's repertoire improve forecasts of his performance over the next month?
 
-This project will use public MLB Statcast data to compare forecasts based on past results, current pitch characteristics, and recent changes in those characteristics. The intended output is a watchlist that helps an analyst decide which apparent pitcher improvements or declines deserve closer review.
+This project uses public MLB Statcast data to compare forecasts based on past results, current pitch characteristics, and recent changes in those characteristics. The intended output is a watchlist that helps an analyst decide which apparent pitcher improvements or declines deserve closer review.
 
 ## Status
 
-The data pipeline and model code are written; no results yet. 2020-2023 Statcast data has been downloaded and the 2021-2023 forecast rows build and pass hand checks against published season totals. Next is the 2024-2025 download and the first 2024 validation run. The interface follows once there are results to explain.
+The first 2024 validation is complete. Recent-change features do not show a clear gain over current pitch characteristics, and the results-only model has the lowest overall loss. A rare-repertoire failure accounts for much of the difference; details below. All 2020-2025 data is downloaded and passes the game-level audit. The 2025 holdout remains unscored. There is no interface yet.
 
 ## Running it
 
 Requires [uv](https://docs.astral.sh/uv/). Downloaded data and outputs stay in the gitignored `data/` and `artifacts/` folders.
 
 ```bash
-uv run python -m pcf.ingest      # Statcast pitches, 2020 (history only) through 2025; resumes from saved chunks
-uv run python -m pcf.dataset     # one row per pitcher per Monday forecast date
-uv run python -m pcf.model       # fit A/B/C, tune and score on 2024
-uv run python -m pcf.model --final   # score the 2025 holdout once
+uv run python3 -m pcf.ingest      # 2020 history plus 2021-2025; resumes saved chunks
+uv run python3 -m pcf.audit --fetch-schedules  # compare chunks with completed MLB games
+uv run python3 -m pcf.dataset --through-season 2024
+uv run python3 -m pcf.model       # fit A/B/C, tune and score on 2024
+uv run python3 -m pcf.report      # comparison charts, calibration, and failure reviews
 ```
 
 The full download is about 270 requests and takes roughly 90 minutes. Keep the machine awake (`caffeinate -i` on macOS); a sleeping laptop stalls it.
+
+To include 2025 in the dataset, run `uv run python3 -m pcf.dataset` without a cutoff. Run `uv run python3 -m pcf.model --final` only after the model specification and watchlist rules are fixed; it refits on 2021-2024 and scores 2025 with the validation-selected settings.
+
+## First validation: 2024
+
+Measured on 2026-10-24, training on 2021-2023. There are 6,857 eligible 2024 forecasts; 429 (6.3%) have no subsequent appearances. Accuracy uses the remaining 6,428 forecasts across 538 pitchers. Their 434,953 BF exposures include repeated plate appearances in overlapping weekly target windows.
+
+Lower log loss per BF is better:
+
+| Target | A: results/context | B: + current pitches | C: + recent changes |
+|---|---:|---:|---:|
+| Strikeouts | 0.533940 | 0.536391 | 0.536214 |
+| Walks | 0.265933 | 0.266126 | 0.266029 |
+
+The central C-minus-B comparison is **−0.000177** for strikeouts (95% pitcher-bootstrap interval −0.000729 to +0.000086) and **−0.000097** for walks (−0.000325 to +0.000038). Both intervals include zero. These are development results: regularization was selected on the same 2024 data. The intervals condition on that selection, resample whole pitchers, and do not fully capture shared calendar-time effects across pitchers.
+
+### Failure case: an unfamiliar repertoire
+
+Matt Waldron accounts for most of B's excess loss relative to A. The training rows have at most 2.56% usage in the residual `other` pitch group. Waldron's 2024 repertoire is roughly 33-44% in that group, mainly his knuckleball. The downloaded data contains 936 knuckleballs, matching [MLB's player notes](https://img.mlbstatic.com/mlb-images/image/upload/fl_attachment/mlb/i1wm79f8ska4k2gupw8d.pdf). The linear models extrapolate far beyond the usage range seen in training.
+
+For the 2024-04-29 forecast, B predicts a 1.05% strikeout rate for Waldron; he records 37 strikeouts in 135 BF (27.4%). C predicts 1.32%, so it reduces the loss while still making a poor forecast. All main results retain him. As a diagnostic only, excluding Waldron changes C-minus-B to +0.000032 for strikeouts and −0.000007 for walks; the apparent aggregate gain is therefore not broad evidence for recent changes.
+
+The report command writes the central C-versus-B chart (PNG and PDF), all model comparisons, calibration plots, role/workload results, per-pitcher loss contributions, and the largest C-versus-B misses to `artifacts/`. Generated artifacts and downloaded data stay out of Git.
+
+Hand checks for Aaron Nola and Josh Hader on 2024-06-03 match raw recent-window counts, future targets, fastball velocity, and velocity changes. Adding 2024 leaves all 20,687 existing 2021-2023 rows unchanged. The full 2021-2025 dataset contains 34,278 rows across 1,169 pitchers and 102 forecast dates; adding 2025 leaves all 27,544 earlier rows unchanged.
 
 ## Definitions in the code
 
@@ -94,11 +120,9 @@ A ranked pitcher watchlist with next-month forecasts, uncertainty, and the diffe
 
 ## Next session
 
-1. Finish the 2024-2025 download and check every chunk's row count for gaps.
-2. Build the full dataset and hand-check a few 2024 rows.
-3. Run the 2024 validation comparison of A, B, and C; review calibration and failure cases.
-4. Chart the C-versus-B result with its uncertainty.
-5. Score the 2025 holdout once, then start the watchlist interface.
+1. Define how to flag or handle repertoires outside training support; check the rule with chronological splits inside the training years.
+2. Review the revised 2024 comparison and set any watchlist/false-alert rules before freezing the specification.
+3. Score the 2025 holdout once. Build the interface around the measured results and remaining limitations.
 
 ## Related work
 

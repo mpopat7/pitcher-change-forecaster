@@ -4,6 +4,7 @@ Every feature uses games strictly before the forecast date. Outcomes cover the f
 through 29 days later. Run: python3 -m pcf.dataset
 """
 
+import argparse
 import glob
 from pathlib import Path
 
@@ -28,8 +29,10 @@ WHIFFS = {"swinging_strike", "swinging_strike_blocked", "foul_tip"}
 STRIKEOUTS = {"strikeout", "strikeout_double_play"}
 
 
-def load_pitches() -> pd.DataFrame:
+def load_pitches(through_season=None) -> pd.DataFrame:
     files = sorted(glob.glob(f"{RAW}/*/*.parquet"))
+    if through_season is not None:
+        files = [f for f in files if int(Path(f).parent.name) <= through_season]
     d = pd.concat((pd.read_parquet(f) for f in files), ignore_index=True)
     d = d[d.game_type == "R"].drop_duplicates(["game_pk", "at_bat_number", "pitch_number"])
     d["game_date"] = pd.to_datetime(d.game_date)
@@ -149,8 +152,8 @@ def pitch_features(p: pd.DataFrame, tag: str) -> pd.DataFrame:
     return out.add_suffix(f"_{tag}")
 
 
-def build() -> pd.DataFrame:
-    d = load_pitches()
+def build(through_season=None) -> pd.DataFrame:
+    d = load_pitches(through_season)
     pa = plate_appearances(d)
 
     bat = as_of_daily_rates(pa, "batter", BATTER_PRIOR_PA).rename(
@@ -224,7 +227,7 @@ def build() -> pd.DataFrame:
         fut = pas[(pas.game_date >= t) & (pas.game_date <= t + pd.Timedelta(days=HORIZON - 1))]
         y = fut.groupby("pitcher").agg(y_bf=("k", "size"), y_k=("k", "sum"), y_bb=("bb", "sum"))
         f = f.join(y).fillna({"y_bf": 0, "y_k": 0, "y_bb": 0})
-        rows.append(f.reset_index(names="pitcher"))
+        rows.append(f.copy().reset_index(names="pitcher"))
 
     out = pd.concat(rows, ignore_index=True)
     names = d.groupby("pitcher").player_name.last()
@@ -260,7 +263,9 @@ def add_derived(f: pd.DataFrame) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    out = build()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--through-season", type=int, help="exclude later seasons from the build")
+    out = build(parser.parse_args().through_season)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     out.to_parquet(OUT, index=False)
     print(f"{len(out)} rows, {out.pitcher.nunique()} pitchers, "

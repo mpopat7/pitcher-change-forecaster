@@ -156,7 +156,8 @@ def run(final: bool) -> dict:
 
 def summarize(report: dict) -> None:
     print(f"Test season {report['test_season']}: {report['test_rows']} forecasts, "
-          f"{report['test_pitchers']} pitchers, {report['test_bf']} batters faced")
+          f"{report['test_pitchers']} pitchers, {report['test_bf']} BF exposures "
+          "across overlapping forecast windows")
     for c in report["coverage"]:
         print(f"  {int(c['season'])}: {int(c['eligible'])} eligible, {int(c['no_followup'])} with no follow-up")
     for tgt, r in report["targets"].items():
