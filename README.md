@@ -6,7 +6,7 @@ This project uses public MLB Statcast data to compare forecasts based on past re
 
 ## Status
 
-The first 2024 validation is complete. Recent-change features do not show a clear gain over current pitch characteristics, and the results-only model has the lowest overall loss. A rare-repertoire failure accounts for much of the difference; details below. All 2020-2025 data is downloaded and passes the game-level audit. The 2025 holdout remains unscored. There is no interface yet.
+The revised 2024 validation uses a results-only fallback when current pitch-group usage is outside the training range. Current pitch characteristics now modestly improve on the results-only baseline, but recent-change features still show no clear additional gain. All 2020-2025 data is downloaded and passes the game-level audit. The 2025 holdout remains unscored. Watchlist rules and the interface are not implemented yet.
 
 ## Running it
 
@@ -16,15 +16,48 @@ Requires [uv](https://docs.astral.sh/uv/). Downloaded data and outputs stay in t
 uv run python3 -m pcf.ingest      # 2020 history plus 2021-2025; resumes saved chunks
 uv run python3 -m pcf.audit --fetch-schedules  # compare chunks with completed MLB games
 uv run python3 -m pcf.dataset --through-season 2024
+uv run python3 -m pcf.support     # chronological repertoire-fallback checks on 2022 and 2023
 uv run python3 -m pcf.model       # fit A/B/C, tune and score on 2024
 uv run python3 -m pcf.report      # comparison charts, calibration, and failure reviews
+uv run python3 -m unittest discover -s tests -v
 ```
 
 The full download is about 270 requests and takes roughly 90 minutes. Keep the machine awake (`caffeinate -i` on macOS); a sleeping laptop stalls it.
 
 To include 2025 in the dataset, run `uv run python3 -m pcf.dataset` without a cutoff. Run `uv run python3 -m pcf.model --final` only after the model specification and watchlist rules are fixed; it refits on 2021-2024 and scores 2025 with the validation-selected settings.
 
-## First validation: 2024
+## Revised validation: 2024
+
+Measured on 2026-10-26 with the same 2021-2023 training seasons and 2024 evaluation population as the initial run. Lower log loss per BF is better:
+
+| Target | A: results/context | B: + current pitches | C: + recent changes |
+|---|---:|---:|---:|
+| Strikeouts | 0.533940 | 0.533732 | 0.533774 |
+| Walks | 0.265933 | 0.265745 | 0.265729 |
+
+With the fallback, C-minus-B is **+0.000042** for strikeouts (95% pitcher-bootstrap interval −0.000028 to +0.000108) and **−0.000016** for walks (−0.000071 to +0.000040). Both intervals include zero. B-minus-A is −0.000208 for strikeouts (−0.000411 to −0.000008) and −0.000189 for walks (−0.000300 to −0.000081). These remain development comparisons: the failure was discovered on 2024, and regularization was reselected on 2024 after adding the fallback. The intervals condition on those settings and do not fully capture shared calendar-time effects. All six model/target combinations select C=0.001 from the existing grid. The 2025 holdout is needed to assess generalization.
+
+### Repertoire fallback
+
+For each current pitch group (fastball, cutter, breaking, offspeed, other), record the minimum and maximum usage share across **all eligible training forecasts**, including rows without future appearances. Flag an evaluation forecast if any current share is missing or outside that range. Both B and C then use A's prediction for that target. The bounds use only training features, never evaluation outcomes; no pitchers or flagged forecasts are removed. The rule has no tuned margin or percentile. It checks each current usage share separately; it does not establish support for combinations of pitches, physical traits, or change features.
+
+Before the revised 2024 run, the fixed rule was checked with expanding chronological splits: train 2021 → evaluate 2022; train 2021-2022 → evaluate 2023. Training outcome windows end before the evaluation forecasts. Each of the seven existing regularization settings is reported without selecting a winner on either evaluation season. To isolate the fallback at each setting, A, B, and C use the same regularization within that comparison.
+
+| Evaluation season | Flagged eligible / scored | Pitchers | Reasons |
+|---|---:|---:|---|
+| 2022 | 11 / 11 | 2 | Cutter usage (10), other usage (1) |
+| 2023 | 3 / 3 | 1 | Offspeed usage (3) |
+| 2024 | 33 / 32 | 3 | Other usage (31), fastball usage (2) |
+
+In those earlier splits, the fallback lowers C's loss for both targets at every tested setting. B's effect is mixed: its largest overall loss increase is 0.0000013 per BF. Only 14 earlier scored forecasts trigger the rule, so this is a limited check of a safety fallback, not evidence for a general accuracy improvement.
+
+The 2024 flags are Matt Waldron (20 eligible forecasts, including one without follow-up), Adrian Morejon (11), and Tim Hill (2). For Waldron on 2024-04-29, B and C now use A's **18.94%** K forecast, versus the observed 37/135 = **27.41%**. The original B forecast was 1.05%; with revised regularization its unguarded forecast would be 0.99%. The fallback prevents that extrapolation but does not make the forecast accurate.
+
+`pcf.support` writes every setting's results and all eligibility flags to `artifacts/support_chronological.{json,csv}` and `artifacts/repertoire_chronological.csv`. The model writes `repertoire_validation_2024.csv` for all eligible forecasts, including no-follow-up rows, and saves raw and fallback predictions for scored rows. Reports include training bounds, flag counts, and losses at the selected settings before and after fallback. The report command also compares forecasts within the usage ranges against forecasts using A. The default model run reads only seasons through 2024; support checks read only through 2023.
+
+Validation saves `chosen_C.json` and `repertoire_spec.json`; the final path requires the fallback specification and refits its usage bounds on all eligible 2021-2024 rows. Saving these settings does not freeze watchlist rules. The initial report, predictions, and settings from this development run are retained locally in `artifacts/before_repertoire_fallback/`.
+
+## Initial validation: 2024, before fallback
 
 Measured on 2026-10-24, training on 2021-2023. There are 6,857 eligible 2024 forecasts; 429 (6.3%) have no subsequent appearances. Accuracy uses the remaining 6,428 forecasts across 538 pitchers. Their 434,953 BF exposures include repeated plate appearances in overlapping weekly target windows.
 
@@ -120,8 +153,8 @@ A ranked pitcher watchlist with next-month forecasts, uncertainty, and the diffe
 
 ## Next session
 
-1. Define how to flag or handle repertoires outside training support; check the rule with chronological splits inside the training years.
-2. Review the revised 2024 comparison and set any watchlist/false-alert rules before freezing the specification.
+1. Decide whether the watchlist should rank projected performance or attempt change alerts, given the lack of clear C-versus-B improvement. Define alert thresholds, evaluation denominators, and false-alert rules on validation data.
+2. Freeze the model specification and watchlist rules; current settings and fallback checks are documented above.
 3. Score the 2025 holdout once. Build the interface around the measured results and remaining limitations.
 
 ## Related work

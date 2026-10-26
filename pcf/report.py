@@ -65,9 +65,11 @@ def validation_report():
     plt.close(fig)
 
     preds = pd.read_parquet(ARTIFACTS / "predictions_validation_2024.parquet")
-    context = pd.read_parquet(ROWS, columns=["pitcher", "forecast_date", "start_share"])
+    context = pd.read_parquet(ROWS, columns=["pitcher", "forecast_date", "start_share"],
+                              filters=[("season", "==", 2024)])
     preds = preds.merge(context, on=["pitcher", "forecast_date"], validate="one_to_one")
     preds["role"] = np.where(preds.start_share >= 0.5, "starter", "reliever")
+    preds["repertoire"] = np.where(preds.repertoire_fallback, "fallback to A", "within usage ranges")
     preds["future_bf"] = pd.cut(preds.y_bf, [0, 50, 100, np.inf], labels=["1–50", "51–100", "101+"])
     segments, errors, pitcher_losses = [], [], []
     for target in ("k", "bb"):
@@ -79,7 +81,7 @@ def validation_report():
         by_pitcher["extra_loss_B_vs_A"] = by_pitcher.loss_B - by_pitcher.loss_A
         by_pitcher["extra_loss_C_vs_B"] = by_pitcher.loss_C - by_pitcher.loss_B
         pitcher_losses.append(by_pitcher.reset_index())
-        for group in ("role", "future_bf"):
+        for group in ("role", "future_bf", "repertoire"):
             for label, subset in preds.groupby(group, observed=True):
                 record = {"target": target, "group": group, "segment": str(label),
                           "forecasts": len(subset), "bf": int(subset.y_bf.sum())}
@@ -87,7 +89,8 @@ def validation_report():
                                for m in COLORS})
                 record["C_minus_B"] = record["C"] - record["B"]
                 segments.append(record)
-        e = preds[["pitcher", "name", "forecast_date", "y_bf"]].copy()
+        e = preds[["pitcher", "name", "forecast_date", "y_bf",
+                   "repertoire_fallback", "repertoire_reasons"]].copy()
         e["target"] = target
         e["observed_count"] = preds[f"y_{target}"]
         e["pred_B"], e["pred_C"] = preds[f"p_{target}_B"], preds[f"p_{target}_C"]

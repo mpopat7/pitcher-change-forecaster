@@ -25,12 +25,34 @@ RESULTS_A = [
     "start_share", "bf_per_app", "apps_60", "days_since_last", "month",
 ]
 TARGETS = {"k": "y_k", "bb": "y_bb"}
+USAGE = [f"use_{group}_cur" for group in ("fb", "cut", "brk", "off", "other")]
 
 
 def feature_sets(cols: list[str]) -> dict[str, list[str]]:
     current = [c for c in cols if c.endswith("_cur")]
     changes = [c for c in cols if c.startswith("chg_")]
     return {"A": RESULTS_A, "B": RESULTS_A + current, "C": RESULTS_A + current + changes}
+
+
+class RepertoireSupport:
+    """Observed pitch-group usage ranges, fitted on all eligible training forecasts."""
+
+    def fit(self, rows: pd.DataFrame):
+        self.lower = rows[USAGE].min()
+        self.upper = rows[USAGE].max()
+        return self
+
+    def flags(self, rows: pd.DataFrame) -> pd.DataFrame:
+        usage = rows[USAGE]
+        return (usage.isna() | self.lower.isna() | self.upper.isna()
+                | usage.lt(self.lower - 1e-12) | usage.gt(self.upper + 1e-12))
+
+    def bounds(self) -> dict:
+        return {c: {"min": float(self.lower[c]), "max": float(self.upper[c])} for c in USAGE}
+
+
+def fallback_predictions(p, baseline, unsupported):
+    return np.where(unsupported, baseline, p)
 
 
 class Design:
@@ -64,6 +86,16 @@ def binomial_fit(X, k, n, C):
     return m
 
 
+def fit_candidates(train, test, cols, ycol, grid):
+    design = Design().fit(train[cols])
+    X_tr, X_te = design.transform(train[cols]), design.transform(test[cols])
+    candidates = []
+    for C in grid:
+        model = binomial_fit(X_tr, train[ycol].to_numpy(), train.y_bf.to_numpy(), C)
+        candidates.append((C, model.predict_proba(X_te)[:, 1]))
+    return X_tr.shape[1], candidates
+
+
 def row_loss(p, k, n):
     p = np.clip(p, 1e-6, 1 - 1e-6)
     return -(k * np.log(p) + (n - k) * np.log(1 - p))
@@ -89,52 +121,73 @@ def calibration(p, k, n, bins=10):
 
 
 def run(final: bool) -> dict:
-    rows = pd.read_parquet(ROWS)
+    train_seasons = [2021, 2022, 2023] + ([2024] if final else [])
+    test_season = 2025 if final else 2024
+    rows = pd.read_parquet(ROWS, filters=[("season", "<=", test_season)])
     rows["month"] = rows.forecast_date.dt.month
     coverage = (rows.groupby("season")
                 .apply(lambda s: pd.Series({"eligible": len(s), "no_followup": int((s.y_bf == 0).sum())}),
                        include_groups=False))
-    rows = rows[rows.y_bf > 0]
-
-    train_seasons = [2021, 2022, 2023] + ([2024] if final else [])
-    test_season = 2025 if final else 2024
-    train, test = rows[rows.season.isin(train_seasons)], rows[rows.season == test_season]
+    eligible_train = rows[rows.season.isin(train_seasons)]
+    eligible_test = rows[rows.season == test_season]
+    support = RepertoireSupport().fit(eligible_train)
+    flags = support.flags(eligible_test)
+    unsupported = flags.any(axis=1)
+    train = eligible_train[eligible_train.y_bf > 0]
+    test = eligible_test[eligible_test.y_bf > 0]
+    fallback = unsupported.loc[test.index].to_numpy()
     sets = feature_sets(list(rows.columns))
     chosen_path = ARTIFACTS / "chosen_C.json"
     chosen = json.loads(chosen_path.read_text()) if final else {}
+    if final:
+        specification = json.loads((ARTIFACTS / "repertoire_spec.json").read_text())
+        if specification["rule"] != "current_usage_training_min_max_fallback_A":
+            raise ValueError("Validation settings do not match the repertoire fallback rule")
 
     report = {"test_season": test_season, "train_seasons": train_seasons,
               "coverage": coverage.reset_index().to_dict("records"),
               "test_rows": len(test), "test_pitchers": int(test.pitcher.nunique()),
-              "test_bf": int(test.y_bf.sum()), "targets": {}}
+              "test_bf": int(test.y_bf.sum()),
+              "repertoire_support": {
+                  "rule": "current_usage_training_min_max_fallback_A",
+                  "bounds": support.bounds(), "training_eligible": len(eligible_train),
+                  "flagged_eligible": int(unsupported.sum()),
+                  "flagged_scored": int(fallback.sum()),
+                  "flagged_no_followup": int(unsupported[eligible_test.y_bf == 0].sum()),
+                  "flagged_pitchers": int(eligible_test.loc[unsupported, "pitcher"].nunique()),
+                  "flags_by_feature": flags.sum().astype(int).to_dict()},
+              "targets": {}}
     preds = test[["pitcher", "name", "forecast_date", "y_bf", "y_k", "y_bb"]].copy()
+    preds["repertoire_fallback"] = fallback
+    reasons = flags.apply(lambda row: ",".join(row.index[row]), axis=1)
+    preds["repertoire_reasons"] = reasons.loc[test.index]
 
     for tgt, ycol in TARGETS.items():
-        k_tr, n_tr = train[ycol].to_numpy(), train.y_bf.to_numpy()
         k_te, n_te = test[ycol].to_numpy(), test.y_bf.to_numpy()
-        base_rate = k_tr.sum() / n_tr.sum()
+        base_rate = train[ycol].sum() / train.y_bf.sum()
         res = {"league_rate_loss": float(row_loss(base_rate, k_te, n_te).sum() / n_te.sum()),
                "models": {}}
         losses = {}
         for name, cols in sets.items():
-            design = Design().fit(train[cols])
-            X_tr, X_te = design.transform(train[cols]), design.transform(test[cols])
             if final:
                 grid = [chosen[tgt][name]]
             else:
                 grid = C_GRID
+            n_features, candidates = fit_candidates(train, test, cols, ycol, grid)
             best = None
-            for C in grid:
-                m = binomial_fit(X_tr, k_tr, n_tr, C)
-                p = m.predict_proba(X_te)[:, 1]
+            for C, raw_p in candidates:
+                p = (raw_p if name == "A" else
+                     fallback_predictions(raw_p, preds[f"p_{tgt}_A"].to_numpy(), fallback))
                 loss = row_loss(p, k_te, n_te)
                 if best is None or loss.sum() < best[2].sum():
-                    best = (C, p, loss)
-            C, p, loss = best
+                    best = (C, p, loss, raw_p)
+            C, p, loss, raw_p = best
             losses[name] = loss
             preds[f"p_{tgt}_{name}"] = p
-            res["models"][name] = {"C": C, "n_features": X_tr.shape[1],
+            preds[f"p_{tgt}_{name}_raw"] = raw_p
+            res["models"][name] = {"C": C, "n_features": n_features,
                                    "loss_per_bf": float(loss.sum() / n_te.sum()),
+                                   "raw_loss_per_bf": float(row_loss(raw_p, k_te, n_te).sum() / n_te.sum()),
                                    "calibration": calibration(p, k_te, n_te).round(4).to_dict("records")}
         groups = test.pitcher.to_numpy()
         for a, b in (("A", "B"), ("B", "C"), ("A", "C")):
@@ -149,8 +202,13 @@ def run(final: bool) -> dict:
         chosen_path.write_text(json.dumps(
             {t: {m: r["models"][m]["C"] for m in r["models"]} for t, r in report["targets"].items()},
             indent=2))
+        (ARTIFACTS / "repertoire_spec.json").write_text(json.dumps(
+            {"rule": report["repertoire_support"]["rule"], "features": USAGE}, indent=2))
     (ARTIFACTS / f"report_{tag}.json").write_text(json.dumps(report, indent=2, default=str))
     preds.to_parquet(ARTIFACTS / f"predictions_{tag}.parquet", index=False)
+    audit = eligible_test[["pitcher", "name", "forecast_date", "y_bf", *USAGE]].copy()
+    audit["repertoire_fallback"], audit["repertoire_reasons"] = unsupported, reasons
+    audit.to_csv(ARTIFACTS / f"repertoire_{tag}.csv", index=False)
     return report
 
 
@@ -160,6 +218,9 @@ def summarize(report: dict) -> None:
           "across overlapping forecast windows")
     for c in report["coverage"]:
         print(f"  {int(c['season'])}: {int(c['eligible'])} eligible, {int(c['no_followup'])} with no follow-up")
+    support = report["repertoire_support"]
+    print(f"  Repertoire fallback: {support['flagged_eligible']} eligible forecasts "
+          f"({support['flagged_scored']} scored), {support['flagged_pitchers']} pitchers")
     for tgt, r in report["targets"].items():
         print(f"\n{tgt.upper()}%  log loss per BF (league-rate baseline {r['league_rate_loss']:.5f})")
         for m, v in r["models"].items():
