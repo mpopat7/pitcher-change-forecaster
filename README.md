@@ -2,11 +2,11 @@
 
 Do recent changes in a pitcher's repertoire improve forecasts of his performance over the next month?
 
-This project uses public MLB Statcast data to compare forecasts based on past results, current pitch characteristics, and recent changes in those characteristics. The intended output is a watchlist that helps an analyst decide which apparent pitcher improvements or declines deserve closer review.
+This project uses public MLB Statcast data to compare forecasts based on past results, current pitch characteristics, and recent changes in those characteristics. The pipeline produces a historical performance watchlist and an audit of experimental improvement and decline alerts.
 
 ## Status
 
-The revised 2024 validation uses a results-only fallback when current pitch-group usage is outside the training range. Current pitch characteristics now modestly improve on the results-only baseline, but recent-change features still show no clear additional gain. All 2020-2025 data is downloaded and passes the game-level audit. The 2025 holdout remains unscored. Watchlist rules and the interface are not implemented yet.
+The frozen specification was evaluated once on the 2025 holdout. Current pitch measurements modestly improve strikeout forecasts over the results-only baseline; adding recent-change features makes strikeout forecasts slightly worse and shows no clear walk benefit. The performance watchlist and experimental alert audit are implemented. All 2020-2025 data is downloaded and passes the game-level audit. There is no interface yet.
 
 ## Running it
 
@@ -19,12 +19,32 @@ uv run python3 -m pcf.dataset --through-season 2024
 uv run python3 -m pcf.support     # chronological repertoire-fallback checks on 2022 and 2023
 uv run python3 -m pcf.model       # fit A/B/C, tune and score on 2024
 uv run python3 -m pcf.report      # comparison charts, calibration, and failure reviews
+uv run python3 -m pcf.watchlist   # all-eligible performance ranks and experimental alert audit
 uv run python3 -m unittest discover -s tests -v
 ```
 
 The full download is about 270 requests and takes roughly 90 minutes. Keep the machine awake (`caffeinate -i` on macOS); a sleeping laptop stalls it.
 
-To include 2025 in the dataset, run `uv run python3 -m pcf.dataset` without a cutoff. Run `uv run python3 -m pcf.model --final` only after the model specification and watchlist rules are fixed; it refits on 2021-2024 and scores 2025 with the validation-selected settings.
+To include 2025 in the dataset, run `uv run python3 -m pcf.dataset` without a cutoff. After completing validation, `uv run python3 -m pcf.freeze` records the model and watchlist specification in `research_spec.json`, including source, dependency-lock, and validation-report hashes. It refuses to replace an existing freeze or run after holdout outputs exist. `uv run python3 -m pcf.model --final` checks the frozen specification, refits on 2021-2024, and scores 2025 once; it refuses to overwrite holdout outputs. Use `uv run python3 -m pcf.watchlist --final` and `uv run python3 -m pcf.report --final` to evaluate and plot those saved forecasts without refitting.
+
+## Final evaluation: 2025
+
+The model, feature lists, repertoire fallback, and watchlist rules were frozen in [research_spec.json](research_spec.json) at 2026-10-26 05:49 UTC, before scoring 2025. The specification SHA-256 is `b2038e9abd9b586b5621536b07528bb834de05d3af9da06968fa36c4a653cb91`; the holdout report records the same fingerprint. All models refit on 2021-2024 with regularization C=0.001. No settings were changed after the holdout results were read.
+
+Of 6,734 eligible forecasts, 381 (5.7%) have no subsequent appearances. The remaining 6,353 scored forecasts cover 538 pitchers and 435,187 BF exposures across overlapping weekly target windows. All eligible forecasts are exported. The repertoire fallback applies to five forecasts from two pitchers (Tim Hill and Tommy Kahnle), all with follow-up.
+
+Lower log loss per BF is better:
+
+| Target | A: results/context | B: + current pitches | C: + recent changes |
+|---|---:|---:|---:|
+| Strikeouts | 0.526900 | 0.526715 | 0.526801 |
+| Walks | 0.269622 | 0.269599 | 0.269611 |
+
+The central C-minus-B difference is **+0.000086** for strikeouts (95% pitcher-bootstrap interval +0.000020 to +0.000154) and **+0.000012** for walks (−0.000053 to +0.000070). Recent-change features slightly worsen strikeout accuracy under this specification and provide no clear walk improvement. B-minus-A is −0.000185 for strikeouts (−0.000360 to −0.000008) and −0.000023 for walks (−0.000138 to +0.000091): a small strikeout gain and uncertain walk difference. These intervals resample whole pitchers and condition on the selected settings; they do not fully capture shared calendar-time effects. The scope of this finding is the tested features, windows, and linear model.
+
+The frozen experimental alert rules produce **19 alerts across 19 pitchers: 8 confirmed, 5 false, 6 unresolved**. Five of the 13 resolved alerts are false (38.5%); 11 of all 19 are unconfirmed (57.9%) when unresolved alerts remain in the denominator. Five alerts are not yet evident in the past-results comparison, and three of those confirm under the operational definition below. The sample is small and does not overturn the full-population C-versus-B result. The main performance watchlist has 210 entries across 32 pitchers, including six without follow-up. Its BF-weighted predicted K% minus BB% is 25.36%, observed 26.43%; this diagnostic repeats exposure across weekly rankings.
+
+Use B for the performance ranking and retain C's alerts as experimental review candidates. This study does not establish that tracking recent changes adds reliable next-month forecasting value. A new modeling experiment would need a new evaluation period; 2025 has now been used.
 
 ## Revised validation: 2024
 
@@ -55,7 +75,21 @@ The 2024 flags are Matt Waldron (20 eligible forecasts, including one without fo
 
 `pcf.support` writes every setting's results and all eligibility flags to `artifacts/support_chronological.{json,csv}` and `artifacts/repertoire_chronological.csv`. The model writes `repertoire_validation_2024.csv` for all eligible forecasts, including no-follow-up rows, and saves raw and fallback predictions for scored rows. Reports include training bounds, flag counts, and losses at the selected settings before and after fallback. The report command also compares forecasts within the usage ranges against forecasts using A. The default model run reads only seasons through 2024; support checks read only through 2023.
 
-Validation saves `chosen_C.json` and `repertoire_spec.json`; the final path requires the fallback specification and refits its usage bounds on all eligible 2021-2024 rows. Saving these settings does not freeze watchlist rules. The initial report, predictions, and settings from this development run are retained locally in `artifacts/before_repertoire_fallback/`.
+Validation saves `chosen_C.json` and `repertoire_spec.json`; the final path uses the settings in the frozen `research_spec.json` and refits usage bounds on all eligible 2021-2024 rows. The initial report, predictions, and settings from this development run are retained locally in `artifacts/before_repertoire_fallback/`.
+
+## Watchlist and experimental alerts
+
+The main watchlist ranks **B's projected K% minus BB%**, showing the top ten eligible pitchers each forecast date. Both components, A and C comparisons, past exposure, and repertoire fallback flags are retained. Forecasts cover all eligible rows, including pitchers with no future appearances. The separate `predictions_*` files retain only rows with scored outcomes for the model comparisons.
+
+Experimental alerts flag a C-minus-B difference in projected K% minus BB% of at least **two percentage points**, in either direction. Require at least 150 current pitches and 150 pitches in the earlier comparison window, using the prior-season fallback already defined in the dataset. Forecasts using the repertoire fallback do not alert. Once a pitcher alerts, suppress further alerts for 30 days in either direction. This prevents overlapping target windows within a pitcher's alert series. These are fixed review rules, not thresholds optimized for 2024 success rate.
+
+An alert is resolved only with at least 50 subsequent BF. It is **confirmed under this operational definition** if the observed next-month K% minus BB% differs from B's prediction by at least two points in the alerted direction; otherwise it is a false alert. Fewer than 50 BF, including zero, is unresolved. Report false alerts divided by resolved alerts, plus unconfirmed alerts divided by **all** alerts, including unresolved cases. These are realized outcome checks subject to sampling noise; they do not establish a change in underlying skill, causal coaching effects, or a conventional population false-positive rate.
+
+To inspect whether the direction was already apparent in conventional results, compare past-30-day K% minus BB% with the prior-season rate, requiring at least 50 BF in each. A same-direction difference of two points is already evident; a smaller or opposite change is not yet evident. Missing past exposure is a separate category. This is a descriptive proxy, not an estimate of lead time or evidence that the physical change happened first. It does not affect alert selection.
+
+On 2024 validation, 46 candidates become **18 alerts across 18 pitchers** after cooldown: **5 confirmed, 3 false, 10 unresolved**. Thus 37.5% of the eight resolved alerts are false, while 72.2% of all alerts are unconfirmed. Seven alerts are not yet evident in the past-results comparison; three of those confirm. The small resolved sample does not establish a reliable alert detector. The main performance watchlist has 210 entries across 47 pitchers and includes three entries without follow-up. Its BF-weighted predicted K% minus BB% is 23.79%, observed 22.34%; repeated weekly exposure remains in this ranking diagnostic.
+
+Outputs are `artifacts/watchlist_{validation_2024,holdout_2025}.{csv,json}` and `artifacts/alerts_{validation_2024,holdout_2025}.csv`. They remain local and gitignored. `research_spec.json` is the portable record of the model and watchlist rules fixed before final evaluation.
 
 ## Initial validation: 2024, before fallback
 
@@ -134,11 +168,11 @@ MLB documents changes to plate-location and strike-zone definitions in 2026. Tre
 
 The central test is C versus B. Improvement over A alone would show that pitch measurements help forecasting, without isolating the value of tracking changes. Give B a credible recency-weighted specification so C does not win against an artificially weak comparator.
 
-Begin with regularized statistical models. Compare boosted trees if nonlinear relationships justify them. Model family, window lengths, and sample thresholds remain open until the data audit and validation work.
+The frozen study uses binomial ridge logistic regression with the windows and thresholds documented above. Alternative model families or feature definitions would be a separate experiment with a new evaluation period.
 
 ## Evaluation
 
-- Proposed split: train on 2021-2023, tune on 2024, and reserve 2025 for the final evaluation.
+- Split: train on 2021-2023, tune on 2024, and evaluate the frozen specification on 2025 after refitting on 2021-2024.
 - Replay forecast dates chronologically. Training outcomes and every input must be available before the relevant cutoff; keep overlapping target windows from crossing evaluation boundaries.
 - Compare probability accuracy and calibration, with uncertainty estimates that account for repeated pitchers and time dependence.
 - Report performance across workloads and pitcher roles, coverage, and missing follow-up.
@@ -151,11 +185,13 @@ A finding that change features add no predictive value is a valid research resul
 
 A ranked pitcher watchlist with next-month forecasts, uncertainty, and the difference from the baseline. Each pitcher view would show pitch measurements over time, supporting outcomes, sample sizes, and historical forecast errors. Model explanations describe predictive associations.
 
+The current pipeline exports point forecasts and uncertainty intervals for **model comparisons**. Pitcher-level forecast intervals are not implemented; the interface must distinguish those from the bootstrap comparison intervals.
+
 ## Next session
 
-1. Decide whether the watchlist should rank projected performance or attempt change alerts, given the lack of clear C-versus-B improvement. Define alert thresholds, evaluation denominators, and false-alert rules on validation data.
-2. Freeze the model specification and watchlist rules; current settings and fallback checks are documented above.
-3. Score the 2025 holdout once. Build the interface around the measured results and remaining limitations.
+1. Build a historical forecast browser around B's performance ranking, with A/C comparisons, sample sizes, repertoire flags, and failed forecasts.
+2. Show experimental alerts with their confirmed/false/unresolved status and the full denominator; do not present them as a validated change detector.
+3. Keep the frozen study and its 2025 result intact when exploring future model changes.
 
 ## Related work
 

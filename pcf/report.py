@@ -1,5 +1,6 @@
-"""Plot validation accuracy and calibration, and export workload and error reviews."""
+"""Plot accuracy and calibration, and export workload and error reviews."""
 
+import argparse
 import json
 
 import matplotlib
@@ -13,8 +14,10 @@ from pcf.model import ARTIFACTS, ROWS, row_loss
 COLORS = {"A": "#777777", "B": "#2879a1", "C": "#186646"}
 
 
-def validation_report():
-    report = json.loads((ARTIFACTS / "report_validation_2024.json").read_text())
+def evaluation_report(final=False):
+    season, tag = (2025, "holdout_2025") if final else (2024, "validation_2024")
+    label = f"{season} {'holdout' if final else 'validation'}"
+    report = json.loads((ARTIFACTS / f"report_{tag}.json").read_text())
     fig, ax = plt.subplots(figsize=(7.5, 3.2), layout="constrained")
     for y, target in enumerate(["k", "bb"]):
         value = report["targets"][target]["C_minus_B"]
@@ -24,11 +27,11 @@ def validation_report():
                     fmt="o", capsize=5, color=COLORS["C"])
     ax.axvline(0, color="#999999", linewidth=1, linestyle="--")
     ax.set(yticks=[0, 1], yticklabels=["Strikeouts", "Walks"], ylim=(1.5, -0.5),
-           title="2024 validation: recent changes versus current pitches\n95% pitcher-bootstrap intervals",
+           title=f"{label}: recent changes versus current pitches\n95% pitcher-bootstrap intervals",
            xlabel="Change in log loss per 1,000 BF (C − B)\nNegative favors recent-change features")
     ax.spines[["top", "right"]].set_visible(False)
-    fig.savefig(ARTIFACTS / "changes_validation_2024.png", dpi=180)
-    fig.savefig(ARTIFACTS / "changes_validation_2024.pdf")
+    fig.savefig(ARTIFACTS / f"changes_{tag}.png", dpi=180)
+    fig.savefig(ARTIFACTS / f"changes_{tag}.pdf")
     plt.close(fig)
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 4.2), layout="constrained")
@@ -45,8 +48,8 @@ def validation_report():
                xlabel="Change in log loss per 1,000 BF\nNegative favors the added features")
         ax.invert_yaxis()
         ax.spines[["top", "right"]].set_visible(False)
-    fig.suptitle("2024 validation: model comparisons with 95% pitcher-bootstrap intervals")
-    fig.savefig(ARTIFACTS / "comparison_validation_2024.png", dpi=180)
+    fig.suptitle(f"{label}: model comparisons with 95% pitcher-bootstrap intervals")
+    fig.savefig(ARTIFACTS / f"comparison_{tag}.png", dpi=180)
     plt.close(fig)
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 4.2), layout="constrained")
@@ -60,13 +63,13 @@ def validation_report():
         ax.set(title=title, xlabel="Predicted rate (%)", ylabel="Observed rate (%)")
         ax.legend(title="Model")
         ax.spines[["top", "right"]].set_visible(False)
-    fig.suptitle("2024 validation: calibration by forecast decile")
-    fig.savefig(ARTIFACTS / "calibration_validation_2024.png", dpi=180)
+    fig.suptitle(f"{label}: calibration by forecast decile")
+    fig.savefig(ARTIFACTS / f"calibration_{tag}.png", dpi=180)
     plt.close(fig)
 
-    preds = pd.read_parquet(ARTIFACTS / "predictions_validation_2024.parquet")
+    preds = pd.read_parquet(ARTIFACTS / f"predictions_{tag}.parquet")
     context = pd.read_parquet(ROWS, columns=["pitcher", "forecast_date", "start_share"],
-                              filters=[("season", "==", 2024)])
+                              filters=[("season", "==", season)])
     preds = preds.merge(context, on=["pitcher", "forecast_date"], validate="one_to_one")
     preds["role"] = np.where(preds.start_share >= 0.5, "starter", "reliever")
     preds["repertoire"] = np.where(preds.repertoire_fallback, "fallback to A", "within usage ranges")
@@ -82,8 +85,8 @@ def validation_report():
         by_pitcher["extra_loss_C_vs_B"] = by_pitcher.loss_C - by_pitcher.loss_B
         pitcher_losses.append(by_pitcher.reset_index())
         for group in ("role", "future_bf", "repertoire"):
-            for label, subset in preds.groupby(group, observed=True):
-                record = {"target": target, "group": group, "segment": str(label),
+            for segment, subset in preds.groupby(group, observed=True):
+                record = {"target": target, "group": group, "segment": str(segment),
                           "forecasts": len(subset), "bf": int(subset.y_bf.sum())}
                 record.update({m: float(subset[f"loss_{m}"].sum() / subset.y_bf.sum())
                                for m in COLORS})
@@ -100,12 +103,14 @@ def validation_report():
         # Require enough follow-up to avoid ranking tiny denominators as large misses.
         e = e[e.y_bf >= 50].sort_values("extra_loss_C_vs_B", ascending=False)
         errors.append(e.head(20))
-    pd.DataFrame(segments).to_csv(ARTIFACTS / "segments_validation_2024.csv", index=False)
-    pd.concat(errors, ignore_index=True).to_csv(ARTIFACTS / "errors_validation_2024.csv", index=False)
+    pd.DataFrame(segments).to_csv(ARTIFACTS / f"segments_{tag}.csv", index=False)
+    pd.concat(errors, ignore_index=True).to_csv(ARTIFACTS / f"errors_{tag}.csv", index=False)
     pd.concat(pitcher_losses, ignore_index=True).to_csv(
-        ARTIFACTS / "pitcher_losses_validation_2024.csv", index=False)
-    print("Wrote validation comparison, calibration, segments, pitcher losses, and largest misses.")
+        ARTIFACTS / f"pitcher_losses_{tag}.csv", index=False)
+    print(f"Wrote {label} comparison, calibration, segments, pitcher losses, and largest misses.")
 
 
 if __name__ == "__main__":
-    validation_report()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--final", action="store_true", help="report the already-scored 2025 holdout")
+    evaluation_report(parser.parse_args().final)

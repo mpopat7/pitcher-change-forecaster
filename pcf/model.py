@@ -123,6 +123,13 @@ def calibration(p, k, n, bins=10):
 def run(final: bool) -> dict:
     train_seasons = [2021, 2022, 2023] + ([2024] if final else [])
     test_season = 2025 if final else 2024
+    if final:
+        from pcf.freeze import load_frozen_spec
+        specification = load_frozen_spec()
+        for kind in ("report", "predictions", "forecasts", "repertoire"):
+            extension = "json" if kind == "report" else "csv" if kind == "repertoire" else "parquet"
+            if (ARTIFACTS / f"{kind}_holdout_2025.{extension}").exists():
+                raise FileExistsError("Holdout outputs already exist; final scoring cannot overwrite them")
     rows = pd.read_parquet(ROWS, filters=[("season", "<=", test_season)])
     rows["month"] = rows.forecast_date.dt.month
     coverage = (rows.groupby("season")
@@ -135,14 +142,13 @@ def run(final: bool) -> dict:
     unsupported = flags.any(axis=1)
     train = eligible_train[eligible_train.y_bf > 0]
     test = eligible_test[eligible_test.y_bf > 0]
+    scored = eligible_test.y_bf.to_numpy() > 0
     fallback = unsupported.loc[test.index].to_numpy()
     sets = feature_sets(list(rows.columns))
     chosen_path = ARTIFACTS / "chosen_C.json"
-    chosen = json.loads(chosen_path.read_text()) if final else {}
-    if final:
-        specification = json.loads((ARTIFACTS / "repertoire_spec.json").read_text())
-        if specification["rule"] != "current_usage_training_min_max_fallback_A":
-            raise ValueError("Validation settings do not match the repertoire fallback rule")
+    chosen = specification["regularization"] if final else {}
+    if final and sets != specification["features"]:
+        raise ValueError("Feature sets differ from the frozen specification")
 
     report = {"test_season": test_season, "train_seasons": train_seasons,
               "coverage": coverage.reset_index().to_dict("records"),
@@ -157,10 +163,13 @@ def run(final: bool) -> dict:
                   "flagged_pitchers": int(eligible_test.loc[unsupported, "pitcher"].nunique()),
                   "flags_by_feature": flags.sum().astype(int).to_dict()},
               "targets": {}}
-    preds = test[["pitcher", "name", "forecast_date", "y_bf", "y_k", "y_bb"]].copy()
-    preds["repertoire_fallback"] = fallback
+    if final:
+        from pcf.freeze import SPEC, file_hash
+        report["frozen_spec_sha256"] = file_hash(SPEC)
+    forecasts = eligible_test[["pitcher", "name", "forecast_date", "y_bf", "y_k", "y_bb"]].copy()
+    forecasts["repertoire_fallback"] = unsupported
     reasons = flags.apply(lambda row: ",".join(row.index[row]), axis=1)
-    preds["repertoire_reasons"] = reasons.loc[test.index]
+    forecasts["repertoire_reasons"] = reasons
 
     for tgt, ycol in TARGETS.items():
         k_te, n_te = test[ycol].to_numpy(), test.y_bf.to_numpy()
@@ -173,22 +182,23 @@ def run(final: bool) -> dict:
                 grid = [chosen[tgt][name]]
             else:
                 grid = C_GRID
-            n_features, candidates = fit_candidates(train, test, cols, ycol, grid)
+            n_features, candidates = fit_candidates(train, eligible_test, cols, ycol, grid)
             best = None
             for C, raw_p in candidates:
                 p = (raw_p if name == "A" else
-                     fallback_predictions(raw_p, preds[f"p_{tgt}_A"].to_numpy(), fallback))
-                loss = row_loss(p, k_te, n_te)
+                     fallback_predictions(raw_p, forecasts[f"p_{tgt}_A"].to_numpy(),
+                                          unsupported.to_numpy()))
+                loss = row_loss(p[scored], k_te, n_te)
                 if best is None or loss.sum() < best[2].sum():
                     best = (C, p, loss, raw_p)
             C, p, loss, raw_p = best
             losses[name] = loss
-            preds[f"p_{tgt}_{name}"] = p
-            preds[f"p_{tgt}_{name}_raw"] = raw_p
+            forecasts[f"p_{tgt}_{name}"] = p
+            forecasts[f"p_{tgt}_{name}_raw"] = raw_p
             res["models"][name] = {"C": C, "n_features": n_features,
                                    "loss_per_bf": float(loss.sum() / n_te.sum()),
-                                   "raw_loss_per_bf": float(row_loss(raw_p, k_te, n_te).sum() / n_te.sum()),
-                                   "calibration": calibration(p, k_te, n_te).round(4).to_dict("records")}
+                                   "raw_loss_per_bf": float(row_loss(raw_p[scored], k_te, n_te).sum() / n_te.sum()),
+                                   "calibration": calibration(p[scored], k_te, n_te).round(4).to_dict("records")}
         groups = test.pitcher.to_numpy()
         for a, b in (("A", "B"), ("B", "C"), ("A", "C")):
             est, lo, hi = clustered_ci(losses[b] - losses[a], n_te, groups)
@@ -205,7 +215,8 @@ def run(final: bool) -> dict:
         (ARTIFACTS / "repertoire_spec.json").write_text(json.dumps(
             {"rule": report["repertoire_support"]["rule"], "features": USAGE}, indent=2))
     (ARTIFACTS / f"report_{tag}.json").write_text(json.dumps(report, indent=2, default=str))
-    preds.to_parquet(ARTIFACTS / f"predictions_{tag}.parquet", index=False)
+    forecasts.loc[test.index].to_parquet(ARTIFACTS / f"predictions_{tag}.parquet", index=False)
+    forecasts.to_parquet(ARTIFACTS / f"forecasts_{tag}.parquet", index=False)
     audit = eligible_test[["pitcher", "name", "forecast_date", "y_bf", *USAGE]].copy()
     audit["repertoire_fallback"], audit["repertoire_reasons"] = unsupported, reasons
     audit.to_csv(ARTIFACTS / f"repertoire_{tag}.csv", index=False)
