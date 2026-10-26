@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Replay historical pitcher forecasts, inspect pitch measurements, and review the frozen 2025 forecasting study.">
+  <title>Pitcher · Forecast archive</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#forecasts">Skip to forecasts</a>
+  <nav class="nav wrap" aria-label="Main navigation">
+    <a class="brand" href="./" aria-label="Pitcher forecast archive home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13"/><path d="M8 6c9 6 9 14 0 20M24 6c-9 6-9 14 0 20M9 11l4-2M11 16h4M9 21l4 2M23 11l-4-2M21 16h-4M23 21l-4 2"/></svg>
+      <span>Pitcher<span class="brand-sub">Forecast archive</span></span>
+    </a>
+    <div class="nav-links"><a href="#forecasts">Explore forecasts</a><a href="#study">The study</a><a class="source-link" href="https://github.com/mpopat7/pitcher-change-forecaster" target="_blank" rel="noreferrer">View source <span aria-hidden="true">↗</span></a></div>
+  </nav>
+  <main class="wrap">
+    <header class="hero">
+      <div><p class="eyebrow">MLB / Statcast / 2024–2025</p><h1>A month <em>ahead.</em></h1></div>
+      <p class="lede">Replay next-month pitcher forecasts. Look at the pitches behind a projection, then reveal how it turned out.</p>
+    </header>
+    <div class="study-strip"><span class="small-label">The held-out finding</span><p>Current pitch measurements help a little. Recent-change features did not improve the comparison.</p><a href="#study">See the evidence <span aria-hidden="true">↓</span></a></div>
+    <section id="forecasts" class="workspace" aria-label="Forecast explorer">
+      <div class="controls panel">
+        <div class="control"><label for="season">Study season</label><select id="season"><option value="2025">2025 · Held-out evaluation</option><option value="2024">2024 · Development validation</option></select></div>
+        <div class="control date-control"><label for="date">Forecast date</label><div class="date-picker"><button id="previous-date" class="icon-button" aria-label="Previous forecast date">‹</button><select id="date" aria-label="Forecast date"></select><button id="next-date" class="icon-button" aria-label="Next forecast date">›</button></div></div>
+        <label class="outcome-toggle" for="outcomes"><input id="outcomes" type="checkbox"><span>Reveal outcomes<small>Following 30 days</small></span></label>
+      </div>
+      <div id="load-error" class="empty panel" hidden><h2>Forecasts could not load.</h2><p id="error-message"></p><button id="retry" class="button">Try again</button></div>
+      <div id="loading" class="loading panel" role="status">Loading saved forecasts…</div>
+      <div id="explorer" class="explorer" hidden>
+        <section class="results panel" aria-labelledby="results-title">
+          <div class="results-heading"><div><p class="eyebrow" id="period-label"></p><h2 id="results-title">Performance watchlist</h2></div><button id="export" class="text-button">Export CSV <span aria-hidden="true">↓</span></button></div>
+          <div class="view-tabs" role="group" aria-label="Forecast view">
+            <button data-view="watchlist" aria-pressed="true">Top ten</button><button data-view="all" aria-pressed="false">All pitchers</button><button data-view="alerts" aria-pressed="false">Alerts <span class="experimental-mark">Experimental</span></button><button data-view="misses" aria-pressed="false">Largest misses</button>
+          </div>
+          <div class="filters"><div class="search-field"><label class="sr-only" for="search">Search pitchers</label><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg><input id="search" type="search" placeholder="Find a pitcher" autocomplete="off"></div><div><label class="sr-only" for="role">Pitcher role</label><select id="role"><option value="all">All roles</option><option value="starter">Starters</option><option value="reliever">Relievers</option></select></div></div>
+          <p class="view-description" id="view-description"></p>
+          <div class="table-scroll"><table class="forecast-table"><caption class="sr-only">Historical pitcher forecasts. Select a pitcher to inspect the forecast.</caption><thead id="table-head"></thead><tbody id="table-body"></tbody></table></div>
+          <div id="empty-results" class="empty" hidden><h3>No matching forecasts.</h3><p>Try another date, name, or role.</p><button id="clear-filters" class="button secondary">Clear filters</button></div>
+          <div class="table-footer"><p id="result-count" role="status" aria-live="polite"></p><div class="pagination"><button id="previous-page" class="icon-button" aria-label="Previous page">‹</button><span id="page-number"></span><button id="next-page" class="icon-button" aria-label="Next page">›</button></div></div>
+          <p class="table-note">Study rank uses B’s forecast across all eligible pitchers. Later outcomes never change the ranking.</p>
+        </section>
+        <aside id="detail" class="detail panel" aria-label="Selected pitcher forecast"></aside>
+      </div>
+    </section>
+    <section id="study" class="study-section" aria-labelledby="study-title"><div class="study-intro"><div><p class="eyebrow">The experiment</p><h2 id="study-title">Do recent changes<br>add useful information?</h2></div><p>Compare recent results, current pitches, and recent changes. The question is whether tracking a change improves the next-month forecast beyond knowing what a pitcher throws now.</p></div><div class="panel study-card" id="study-results"></div>
+      <details class="method-details"><summary>Definitions, coverage, and limitations</summary><div class="method-copy"><p><strong>A · Results.</strong> Shrunk recent and historical strikeout and walk rates, workload, role, and opponent context. <strong>B · Current pitches.</strong> A plus last-30-day pitch measurements and usage. <strong>C · Recent changes.</strong> B plus changes from an earlier window.</p><p>Eligibility requires at least 50 batters faced in the preceding 60 days and an appearance in the preceding 14. Forecasts cover the following 30 calendar days. Pitch measurements compare the last 30 days with days 31–120, or the prior season when the earlier window contains fewer than 150 pitches.</p><p>Alerts require a C-minus-B difference of at least two percentage points in projected K% minus BB%, at least 150 current and comparison pitches, no repertoire fallback, and a 30-day cooldown per pitcher. With at least 50 later batters faced, an alert is “confirmed” only if the observed K% minus BB% differs from B by at least two points in the alerted direction. Smaller follow-up samples are unresolved. These outcomes do not establish a change in underlying skill.</p><p>“Already evident” compares recent K% minus BB% with the prior-season rate, requiring at least 50 batters faced in each. It is a descriptive check, not proof of lead time. Missing past exposure is shown separately.</p><p>Weekly outcome windows overlap. Model-comparison intervals resample whole pitchers and do not fully capture shared calendar effects. Upcoming opponents use the schedule of games actually played. Repertoire flags check each current usage share separately, not support for every combination of traits.</p><p>These are historical point forecasts, not live projections or causal coaching recommendations. Individual forecast intervals are not estimated. The model and alert rules were fixed before the 2025 evaluation; the holdout is now used.</p></div></details>
+    </section>
+    <footer><span>Pitcher Change Forecaster</span><span>Public Statcast data · Frozen study, October 2026</span><a href="https://github.com/mpopat7/pitcher-change-forecaster#final-evaluation-2025" target="_blank" rel="noreferrer">Read the full study ↗</a></footer>
+  </main>
+  <div id="announcement" class="sr-only" role="status" aria-live="polite"></div>
+  <noscript><p class="wrap">JavaScript is required to filter and inspect the saved forecasts.</p></noscript>
+</body>
+</html>

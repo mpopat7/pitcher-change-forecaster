@@ -6,7 +6,7 @@ This project uses public MLB Statcast data to compare forecasts based on past re
 
 ## Status
 
-The frozen specification was evaluated once on the 2025 holdout. Current pitch measurements modestly improve strikeout forecasts over the results-only baseline; adding recent-change features makes strikeout forecasts slightly worse and shows no clear walk benefit. The performance watchlist and experimental alert audit are implemented. All 2020-2025 data is downloaded and passes the game-level audit. There is no interface yet.
+The frozen specification was evaluated once on the 2025 holdout. Current pitch measurements modestly improve strikeout forecasts over the results-only baseline; adding recent-change features makes strikeout forecasts slightly worse and shows no clear walk benefit. A local historical forecast browser now covers every eligible 2024 and 2025 forecast, with pitch histories, model comparisons, and experimental alert outcomes. All 2020-2025 data is downloaded and passes the game-level audit.
 
 ## Running it
 
@@ -26,6 +26,26 @@ uv run python3 -m unittest discover -s tests -v
 The full download is about 270 requests and takes roughly 90 minutes. Keep the machine awake (`caffeinate -i` on macOS); a sleeping laptop stalls it.
 
 To include 2025 in the dataset, run `uv run python3 -m pcf.dataset` without a cutoff. After completing validation, `uv run python3 -m pcf.freeze` records the model and watchlist specification in `research_spec.json`, including source, dependency-lock, and validation-report hashes. It refuses to replace an existing freeze or run after holdout outputs exist. `uv run python3 -m pcf.model --final` checks the frozen specification, refits on 2021-2024, and scores 2025 once; it refuses to overwrite holdout outputs. Use `uv run python3 -m pcf.watchlist --final` and `uv run python3 -m pcf.report --final` to evaluate and plot those saved forecasts without refitting.
+
+## Browse the saved forecasts
+
+From the repository root, with the saved study outputs already present:
+
+```bash
+uv run python3 -m pcf.browser             # build and serve at http://127.0.0.1:8765
+uv run python3 -m pcf.browser --build-only # export without starting a server
+node --test tests/browser.test.mjs        # frontend filtering, export, and chart checks
+```
+
+The browser reads saved forecasts, watchlist audits, and as-of pitch measurements. It checks the frozen study fingerprint and does not fit models, select new thresholds, or rerun holdout scoring. Source files are in `web/`; the builder is `pcf/browser.py`. It adds no dependencies to the frozen environment.
+
+The generated `artifacts/browser/standalone.html` embeds the data, styles, and JavaScript for all **13,591 eligible forecasts** across both seasons. It can be copied or opened as a single file without a running server. Web fonts are optional requests to Google Fonts; forecast data stays in the file. The same folder also contains the modular static site and season-specific JSON files. All exports remain gitignored.
+
+Choose a season and forecast date, filter by pitcher or past role, and switch between the frozen top-ten watchlist, all eligible pitchers, experimental alerts, and largest misses. Dates can be replayed with previous/next controls. Ranks stay those of the original study, including when filters narrow the list. Alerts and misses initially span the full season. Largest misses are absolute B-versus-observed K% minus BB% gaps among forecasts with at least 50 future BF; this view explicitly uses later outcomes.
+
+Select a pitcher for A/B/C forecasts, current and earlier-window pitch measurements, pitch mix, and history through the selected date. History charts can show projected K% minus BB%, fastball velocity, vertical movement, or usage, with a table alternative. Later forecast dates are excluded from those histories. The **Reveal outcomes** control shows following-month results and saved confirmed/false/unresolved alert statuses. Zero follow-up is shown as missing observation, never as a zero rate. Turning outcomes off exits the misses view. Table and history CSV exports omit outcomes while they are hidden; copied forecast links retain the season, date, pitcher, filters, view, and outcome visibility.
+
+The UI uses the chosen soft-editorial style: Newsreader headings, Geist interface text, a cool gray page, white panels, and a deep-green accent. It is keyboard accessible and adapts to phone widths. Individual forecast uncertainty intervals remain unestimated; only the study's model-comparison intervals are displayed. These are historical forecasts, not live player projections. The browser has not been published.
 
 ## Final evaluation: 2025
 
@@ -181,17 +201,17 @@ The frozen study uses binomial ridge logistic regression with the windows and th
 
 A finding that change features add no predictive value is a valid research result. Report it alongside the comparison that produced it.
 
-## Planned interface
+## Interface limits
 
-A ranked pitcher watchlist with next-month forecasts, uncertainty, and the difference from the baseline. Each pitcher view would show pitch measurements over time, supporting outcomes, sample sizes, and historical forecast errors. Model explanations describe predictive associations.
+The browser displays point forecasts, comparisons, pitch measurements over time, sample sizes, and historical outcomes. Model explanations describe predictive associations. Change alerts remain experimental and show unresolved cases alongside confirmed and false alerts.
 
 The current pipeline exports point forecasts and uncertainty intervals for **model comparisons**. Pitcher-level forecast intervals are not implemented; the interface must distinguish those from the bootstrap comparison intervals.
 
 ## Next session
 
-1. Build a historical forecast browser around B's performance ranking, with A/C comparisons, sample sizes, repertoire flags, and failed forecasts.
-2. Show experimental alerts with their confirmed/false/unresolved status and the full denominator; do not present them as a validated change detector.
-3. Keep the frozen study and its 2025 result intact when exploring future model changes.
+1. Review the local browser before selecting hosting or publishing a shareable version.
+2. Consider pitcher-level forecast uncertainty as a separate extension; do not reuse comparison intervals as individual prediction intervals.
+3. Keep the frozen study and its 2025 result intact when exploring future model changes; a new experiment needs a new evaluation period.
 
 ## Related work
 
