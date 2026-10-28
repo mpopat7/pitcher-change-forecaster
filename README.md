@@ -47,6 +47,8 @@ Select a pitcher for A/B/C forecasts, current and earlier-window pitch measureme
 
 The UI uses the chosen soft-editorial style: Newsreader headings, Geist interface text, a cool gray page, white panels, and a deep-green accent. It is keyboard accessible and adapts to phone widths. Individual forecast uncertainty intervals remain unestimated; only the study's model-comparison intervals are displayed. These are historical forecasts, not live player projections. The browser has not been published.
 
+For a short demonstration, follow [the browser walkthrough](DEMO.md), which pairs a confirmed alert with a false alert and an unresolved case before returning to the full study result. A 2026-10-27 review verified desktop and phone layouts, outcome visibility, and switching embedded seasons with the preview server stopped.
+
 ## Final evaluation: 2025
 
 The model, feature lists, repertoire fallback, and watchlist rules were frozen in [research_spec.json](research_spec.json) at 2026-10-26 05:49 UTC, before scoring 2025. The specification SHA-256 is `b2038e9abd9b586b5621536b07528bb834de05d3af9da06968fa36c4a653cb91`; the holdout report records the same fingerprint. All models refit on 2021-2024 with regularization C=0.001. No settings were changed after the holdout results were read.
@@ -209,7 +211,7 @@ The current pipeline exports point forecasts and uncertainty intervals for **mod
 
 ## Next session
 
-1. Review the local browser before selecting hosting or publishing a shareable version.
+1. Select the hosted browser's audience and publish the reviewed version.
 2. Consider pitcher-level forecast uncertainty as a separate extension; do not reuse comparison intervals as individual prediction intervals.
 3. Keep the frozen study and its 2025 result intact when exploring future model changes; a new experiment needs a new evaluation period.
 
