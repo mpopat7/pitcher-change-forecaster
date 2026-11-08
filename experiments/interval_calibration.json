@@ -1,0 +1,31 @@
+{
+  "experiment": "interval_calibration_v1",
+  "purpose": "Compare two fixed interval methods in development; do not select an alert rule automatically.",
+  "methods": ["percentile", "welch_t"],
+  "confidence": 0.95,
+  "seed": 20261108,
+  "bootstrap_draws": 400,
+  "known_trials_per_cell": 500,
+  "distributions": ["normal", "lognormal", "two_point"],
+  "count_modes": ["fixed", "informative"],
+  "outing_pairs": [[2, 2], [3, 3], [5, 5], [10, 10], [25, 25], [10, 2], [25, 3], [25, 5], [25, 10]],
+  "effects": [0.0, 1.0],
+  "fixed_pitch_count": 20,
+  "informative_pitch_counts": [5, 50],
+  "known_truth": "Counts depend on unshifted outing state. Add effect times count to recent sums. The population pitch-weighted difference remains exactly effect.",
+  "effect_interpretation": "One SD of the unweighted latent outing mean is a sensitivity illustration, not a practical baseball threshold.",
+  "empirical_contexts": 400,
+  "empirical_trials_per_context": 100,
+  "empirical_pool": "Reuse every saved reliability null context and its baseline-outing pool, through 2024 only.",
+  "zero_variance": "Welch interval unavailable; preserve percentile point intervals and report both support rates.",
+  "numerical_rule": "Eight float64 epsilons scaled to outing/window measurement levels handle constant ratios, coverage boundaries, and numerical zero widths. Apply to both methods; this is not a practical effect threshold.",
+  "usage_boundary": "Both methods unavailable when either observed usage is zero or one.",
+  "widths": "Do not clip intervals to the physical parameter range. Report width and common-supported trials.",
+  "reporting": ["all trials", "supported intervals", "unavailable reasons", "zero-width intervals", "true-parameter coverage", "zero-exclusion sensitivity", "interval widths", "common support", "Monte Carlo uncertainty"],
+  "stop_rule": "Run this grid and these contexts once, preserve failures, and choose no automatic winner or outing cutoff. No 2025/2026 analysis or K/BB tuning.",
+  "references": [
+    "https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.t.html",
+    "https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html",
+    "https://www.nber.org/papers/t0344"
+  ]
+}

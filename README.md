@@ -8,7 +8,7 @@ This project uses public MLB Statcast data to compare forecasts based on past re
 
 The frozen specification was evaluated once on the 2025 holdout. Current pitch measurements modestly improve strikeout forecasts over the results-only baseline; adding recent-change features makes strikeout forecasts slightly worse and shows no clear walk benefit. A local historical forecast browser now covers every eligible 2024 and 2025 forecast, with pitch histories, model comparisons, and experimental alert outcomes. All 2020-2025 data is downloaded and passes the game-level audit.
 
-The per-type experiment measures 27,544 eligible development forecasts from 2021-2024, with sample counts and Detroit/Cincinnati examples. Follow-up reliability and physical-prediction checks found that the measurement intervals are too narrow in sampled null simulations. Shrinkage gives a small development gain for next-month velocity prediction; movement and usage gains remain uncertain. Interval calibration and K%/BB% forecasting tests remain ahead. The original specification and saved results stay frozen.
+The per-type experiment measures 27,544 eligible development forecasts from 2021-2024, with sample counts and Detroit/Cincinnati examples. Reliability checks found poor interval calibration. A fixed comparison found that Welch-style t intervals improve some cases but leave substantial failures. Neither method establishes a reliable change alert. Shrinkage gives a small development gain for next-month velocity prediction; movement and usage gains remain uncertain. K%/BB% forecasting tests remain ahead. The original specification and saved results stay frozen.
 
 ## Running it
 
@@ -268,7 +268,37 @@ For 2022-2024, the comparison below uses 16,022 paired rows per physical metric 
 
 Velocity error falls by about 2.3% against carrying forward the recent mean. The other intervals include zero. These exploratory comparisons condition on the fitted priors, use pitcher resampling, and do not fully account for shared calendar effects or prior-estimation uncertainty. Better physical-mean prediction does not establish persistent underlying skill or better strikeout/walk forecasts.
 
-The next step is a declared comparison of interval methods under known-null simulations and the empirical outing pools. Keep the current negative calibration result, and retain unavailable sparse cases. Per-type intervals that exclude zero should remain diagnostic until calibration improves.
+The interval-method comparison below preserves this negative result and tests one alternative. Per-type intervals that exclude zero remain diagnostic.
+
+### Compare interval methods
+
+The fixed design is in [experiments/interval_calibration.json](experiments/interval_calibration.json). Run it after the reliability analysis:
+
+```bash
+uv run python3 -m pcf.calibration
+```
+
+The two methods are the existing percentile bootstrap and a Welch-style t interval using a finite-outing variance estimate for each pitch-weighted mean. With equal pitch counts per outing, the implementation matches SciPy's independent-sample Welch interval. Unequal counts use a ratio-mean approximation; the simulation tests that approximation rather than assuming it is valid. SciPy is already present in the frozen dependency lock; this experiment changes neither the original environment nor the frozen study.
+
+The declared grid has nine balanced or unequal outing-count pairs, three distributions, fixed or informative pitch counts, and shifts of zero or one latent outing standard deviation. Counts are generated before the shift, so the true population pitch-weighted difference stays known. The nonzero shift measures sensitivity; it is not a baseball alert threshold. There are 500 repetitions per cell, giving 54,000 paired known-truth trials, plus 40,000 trials from the same 400 empirical contexts. Both methods see identical samples, with 400 bootstrap draws per interval. A machine-precision rule prevents floating-point roundoff from becoming a measured effect.
+
+Welch intervals are unavailable when estimated variance is zero, while percentile point intervals remain visible. Both methods retain boundary-usage cases as unavailable. The saved results report availability, true-parameter coverage, zero exclusions, interval width, unavailable reasons, and comparisons on exactly the same supported trials. Interval widths are not clipped to the parameter range, so a very wide interval cannot look useful merely because it includes the truth.
+
+In the empirical pools, the comparison was:
+
+| Fewest outings in either window | Percentile available / trials | Welch available / trials | Zero excluded, percentile | Zero excluded, Welch |
+|---|---:|---:|---:|---:|
+| 2 | 4,401 / 4,500 | 4,112 / 4,500 | 33.6% | 25.3% |
+| 3 | 7,694 / 7,800 | 7,686 / 7,800 | 19.4% | 9.3% |
+| 4-5 | 14,884 / 15,000 | 14,884 / 15,000 | 13.4% | 6.2% |
+| 6-9 | 8,099 / 8,200 | 8,099 / 8,200 | 9.7% | 6.0% |
+| 10+ | 4,388 / 4,500 | 4,388 / 4,500 | 7.8% | 5.7% |
+
+Zero-exclusion percentages use available intervals; unavailable trials stay in the adjacent counts and separate all-trial summaries. These are sample-specific conditional-null results, not real-world false-alert rates. On the 39,169 trials supported by both methods, Welch intervals were a median 1.29 times as wide as percentile intervals (90th percentile: 2.18 times).
+
+The known-truth stress tests still expose failures: with ten recent and two baseline outings from a symmetric two-point distribution and fixed pitch counts, Welch coverage was only 56.4%, with all 500 intervals available. Under skewed data with informative counts, coverage fell to 61.0% in the 25/3-outing case. Better results in the empirical pools therefore do not establish a general calibration fix, and no safe outing cutoff or winning method is selected.
+
+Outputs are under `artifacts/experiments/interval_calibration/`, including every simulated interval, cell-level coverage and sensitivity summaries, support reasons, the design and input fingerprints, and a report. The command refuses to overwrite a run. This completes the declared grid; further methods would need a separate design. Both interval methods remain descriptive. Background: [SciPy's Welch reference](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html) and [research on inference with clustered errors](https://www.nber.org/papers/t0344); neither validates this baseball application.
 
 Compare physical-change review lists against velocity-only and usage-only lists at the same review capacity, showing results across list sizes. Score these lists on physical persistence and keep missing follow-up visible. A persistent physical change is a separate finding from an improvement in strikeouts or walks.
 
