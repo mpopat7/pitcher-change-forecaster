@@ -8,6 +8,8 @@ This project uses public MLB Statcast data to compare forecasts based on past re
 
 The frozen specification was evaluated once on the 2025 holdout. Current pitch measurements modestly improve strikeout forecasts over the results-only baseline; adding recent-change features makes strikeout forecasts slightly worse and shows no clear walk benefit. A local historical forecast browser now covers every eligible 2024 and 2025 forecast, with pitch histories, model comparisons, and experimental alert outcomes. All 2020-2025 data is downloaded and passes the game-level audit.
 
+The per-type experiment measures 27,544 eligible development forecasts from 2021-2024, with sample counts and Detroit/Cincinnati examples. Follow-up reliability and physical-prediction checks found that the measurement intervals are too narrow in sampled null simulations. Shrinkage gives a small development gain for next-month velocity prediction; movement and usage gains remain uncertain. Interval calibration and K%/BB% forecasting tests remain ahead. The original specification and saved results stay frozen.
+
 ## Running it
 
 Requires [uv](https://docs.astral.sh/uv/). Downloaded data and outputs stay in the gitignored `data/` and `artifacts/` folders.
@@ -77,7 +79,7 @@ Measured on 2026-10-26 with the same 2021-2023 training seasons and 2024 evaluat
 | Strikeouts | 0.533940 | 0.533732 | 0.533774 |
 | Walks | 0.265933 | 0.265745 | 0.265729 |
 
-With the fallback, C-minus-B is **+0.000042** for strikeouts (95% pitcher-bootstrap interval −0.000028 to +0.000108) and **−0.000016** for walks (−0.000071 to +0.000040). Both intervals include zero. B-minus-A is −0.000208 for strikeouts (−0.000411 to −0.000008) and −0.000189 for walks (−0.000300 to −0.000081). These remain development comparisons: the failure was discovered on 2024, and regularization was reselected on 2024 after adding the fallback. The intervals condition on those settings and do not fully capture shared calendar-time effects. All six model/target combinations select C=0.001 from the existing grid. The 2025 holdout is needed to assess generalization.
+With the fallback, C-minus-B is **+0.000042** for strikeouts (95% pitcher-bootstrap interval −0.000028 to +0.000108) and **−0.000016** for walks (−0.000071 to +0.000040). Both intervals include zero. B-minus-A is −0.000208 for strikeouts (−0.000411 to −0.000008) and −0.000189 for walks (−0.000300 to −0.000081). These remain development comparisons: the failure was discovered on 2024, and regularization was reselected on 2024 after adding the fallback. The intervals condition on those settings and do not fully capture shared calendar-time effects. All six model/target combinations select C=0.001 from the existing grid. The completed 2025 evaluation above measures generalization for that frozen specification.
 
 ### Repertoire fallback
 
@@ -178,7 +180,7 @@ Candidate inputs, computed only from preceding appearances:
 | Recent changes | Differences between recent and earlier windows, with sample counts |
 | Context | Pitcher role, workload, historical opponent quality and handedness mix |
 
-MLB documents changes to plate-location and strike-zone definitions in 2026. Treat that season separately until measurements can be compared appropriately. Keep downloaded data and generated artifacts out of Git; record retrieval dates, filters, and processing steps when ingestion is implemented.
+MLB documents changes to plate-location and strike-zone definitions in 2026. Treat that season separately until measurements can be compared appropriately. Downloaded data and generated artifacts stay out of Git. The ingestion script records retrieval times and chunk row counts in `data/raw/statcast/retrieval_log.jsonl`; its source defines the filters and retained fields.
 
 ## Model comparisons
 
@@ -209,11 +211,84 @@ The browser displays point forecasts, comparisons, pitch measurements over time,
 
 The current pipeline exports point forecasts and uncertainty intervals for **model comparisons**. Pitcher-level forecast intervals are not implemented; the interface must distinguish those from the bootstrap comparison intervals.
 
-## Next session
+## Research plan: changes within pitch types
 
-1. Select the hosted browser's audience and publish the reviewed version.
-2. Consider pitcher-level forecast uncertainty as a separate extension; do not reuse comparison intervals as individual prediction intervals.
-3. Keep the frozen study and its 2025 result intact when exploring future model changes; a new experiment needs a new evaluation period.
+The original features combine some pitch types into broad groups. A group's average movement can change because a pitcher throws more sinkers and fewer four-seam fastballs, even when neither pitch changes. Those averages still describe the repertoire, and the original forecasting result stands. The next experiment separates pitch selection from changes within a pitch type.
+
+### Measure the change
+
+Start with velocity, vertical and horizontal movement, and usage for each pitcher and recorded pitch type. Report recent and baseline pitch counts, outings, missing measurements, and uncertainty from resampling whole outings. Keep types that appear in only one window and distinguish missing measurements from zero usage. A type absent from the baseline may reflect a classification change or a pitch returning to use; it does not establish that the pitcher learned a new pitch.
+
+The measurement table covers the full eligible MLB population for the 2021-2024 development years, with 2020 available only as prior-season history. It includes summaries of interval width by sample size and Detroit/Cincinnati examples. Release measurements and batter-handedness breakdowns can follow once these measurements pass the reliability checks. All features use pitches thrown before the forecast date.
+
+The first measurement stage runs with the existing downloaded data:
+
+```bash
+uv run python3 -m pcf.changes
+```
+
+It writes `changes.parquet`, eligible forecast metadata, coverage counts, interval-width summaries, a Detroit/Cincinnati CSV, and `report.md` under `artifacts/experiments/per_type_changes/`. Each run records its settings and source/data fingerprints. Use `--output artifacts/experiments/<run-name>` for another run; the command refuses to overwrite an existing output directory. It accepts development seasons only and does not fit models or rescore the original study.
+
+This stage reports unshrunk, pitch-weighted means. Recent pitches come from days 1-30 before the forecast; the baseline uses days 31-120 within that season when there are at least two pitcher outings, otherwise the prior season if available. If neither is available, it retains the sparse earlier data. Each row records the baseline source and observed date range. This is a separate measurement policy from the frozen study's pooled-pitch fallback; two outings permit resampling but do not establish reliability.
+
+Physical intervals resample whole outings where that pitch type and measurement were observed. Usage intervals resample complete repertoires across all outings, with unknown types and missing velocity kept in the denominator. Intervals are unavailable with fewer than two contributing outings in either window, and usage at zero or one also has no interval. The synthetic-null checks below found poor calibration, so these pointwise summaries remain descriptive; they do not establish that a change is real or lasting.
+
+### Check reliability and persistence
+
+Estimate noise by per-type sample size and compare measurements across separate outings, then test whether changes remain in the following 30 days. Develop shrinkage and practical thresholds using chronological development folds. Choose effect sizes before evaluation, state their rationale, and report sensitivity across thresholds. Synthetic-null checks describe behavior under the simulated null; their flag rate is not an observed real-world false-alert probability.
+
+The development reliability and physical-persistence analysis runs after the measurement stage:
+
+```bash
+uv run python3 -m pcf.reliability
+```
+
+It uses each pitcher's first eligible date and then dates at least 30 days apart, leaving 6,594 analysis dates. For the independent-halves check, it splits both recent and baseline outings into separate halves before comparing change estimates. Splitting only the recent window would leave shared baseline noise in both estimates. The output includes correlations, disagreement, sample counts, and pitcher-bootstrap intervals by half-window pitch count.
+
+The synthetic-null check samples up to 400 contexts, balanced across development year, metric, and sample-size bin, among known pitch labels with an available measurement interval. For each context, it generates 100 pairs of pseudo windows from the same baseline-outing pool and uses 200 bootstrap draws to form each interval. This tests the interval procedure under an exchangeable-outing simulation, conditional on observed support. Unsupported simulations and zero-width intervals stay visible, along with Monte Carlo uncertainty. These settings define a bounded diagnostic, not a success threshold or a population false-alert estimate.
+
+Shrinkage pulls a measured change toward zero according to its estimated outing-bootstrap noise and the variation in changes from earlier seasons. The chronological comparisons are 2021 to 2022, 2021-2022 to 2023, and 2021-2023 to 2024; 2021 supplies calibration data only. A type-specific prior needs two distinct training pitchers, otherwise it falls back to the metric-wide pool when available. That requirement permits estimation and does not establish reliability. The saved prior table records its source and training seasons.
+
+Physical persistence is evaluated by predicting the next 30 days' measurements with the unchanged baseline, the unchanged recent state, and the baseline plus shrunk change. All three use the same supported rows. Missing future appearances remain unresolved; future appearances without a particular type imply zero usage but no physical measurement for that type. Direction agreement against a shared baseline is not the main result because baseline noise can inflate it.
+
+Outputs live under `artifacts/experiments/reliability/`: per-row measurements and follow-up, anchor dates, priors, coverage, independent-halves results, synthetic-null results, paired physical prediction errors, and a report. The command checks source and input fingerprints and refuses to overwrite an existing run. Use `--output artifacts/experiments/<run-name>` for another run. These are development diagnostics; they do not evaluate strikeout or walk forecasts or establish a minimum sample size for an alert.
+
+### Development findings
+
+The nominal 95% measurement intervals excluded zero in 6,367 of 39,441 available synthetic-null intervals (16.1%), with 559 unavailable trials retained in coverage. Among sampled contexts with only two outings in the smaller window, 33.1% of available intervals excluded zero; with ten or more, the rate was 8.8%. These are conditional simulation results from a balanced sample, not population estimates or real-world false-alert rates. They show that the current interval procedure needs calibration, and large pitch counts alone do not resolve the problem. No safe outing cutoff follows from this test.
+
+For 2022-2024, the comparison below uses 16,022 paired rows per physical metric and 17,381 usage rows, out of 23,077 known-label candidate rows per metric. Missing baselines, measurement support, priors, and future observations remain in coverage. Lower squared error is better; each row has its own units.
+
+| Future measurement | Recent-state MSE | Shrunk MSE | Shrunk minus recent, 95% pitcher interval |
+|---|---:|---:|---|
+| Velocity (mph squared) | 0.54504 | 0.53237 | -0.01267 (-0.02346 to -0.00080) |
+| Horizontal movement (inches squared) | 1.29693 | 1.25900 | -0.03793 (-0.07632 to +0.00336) |
+| Vertical movement (inches squared) | 1.34751 | 1.33241 | -0.01510 (-0.05052 to +0.02299) |
+| Usage (fraction squared) | 0.004513 | 0.004494 | -0.000019 (-0.000120 to +0.000098) |
+
+Velocity error falls by about 2.3% against carrying forward the recent mean. The other intervals include zero. These exploratory comparisons condition on the fitted priors, use pitcher resampling, and do not fully account for shared calendar effects or prior-estimation uncertainty. Better physical-mean prediction does not establish persistent underlying skill or better strikeout/walk forecasts.
+
+The next step is a declared comparison of interval methods under known-null simulations and the empirical outing pools. Keep the current negative calibration result, and retain unavailable sparse cases. Per-type intervals that exclude zero should remain diagnostic until calibration improves.
+
+Compare physical-change review lists against velocity-only and usage-only lists at the same review capacity, showing results across list sizes. Score these lists on physical persistence and keep missing follow-up visible. A persistent physical change is a separate finding from an improvement in strikeouts or walks.
+
+### Test forecasting value
+
+Compare per-type change features with a matched baseline that has the same current pitch measurements and results history. Include simple velocity-change and historical baselines. Examine paired forecast losses and directional errors, with workload, measurement support, and missing follow-up reported. Any subgroup findings are exploratory.
+
+Run one predeclared nonlinear comparison to test thresholds and interactions, with a bounded tuning budget and the same baseline information. Report it even if the linear comparison finds no benefit. Future whiffs per swing can support the analysis, but their noise must be measured and they do not replace the K% and BB% targets. Historical whiff rate is already part of the results baseline.
+
+### Evaluate on a separate season
+
+Use 2021-2024 for development with chronological folds and a gap that keeps training outcome windows from crossing evaluation cutoffs. Revised analyses of 2025 are descriptive because that season's results have already been inspected. Preserve the original 2025 evaluation as the result of the original specification.
+
+Before inspecting 2026 outcomes, freeze the features, targets, thresholds, model comparisons, and measurement-compatibility policy. Treat 2026 as a temporal and domain test: audit baseline calibration and coverage for both strikeouts and walks, then score the frozen comparisons once and report the results regardless of direction. If its outcomes have already been inspected during development, it cannot serve as an untouched test.
+
+### Present the evidence
+
+Evaluate MLB-wide before choosing examples. Add a browser team filter and Detroit/Cincinnati pages that distinguish the measured change, its uncertainty, later persistence, and forecast impact. Include unsuccessful and unresolved examples, and label cases selected after inspecting outcomes. Team attribution uses the last team the pitcher appeared for before each forecast.
+
+New analysis outputs belong under `artifacts/experiments/`, separate from the frozen study, with their own configuration and source fingerprints. Individual forecast intervals remain deferred. The write-up should follow the measured results, including the possibility that changes are difficult to measure, do not persist, or add little forecasting value. Publication of the historical browser remains a separate task.
 
 ## Related work
 
