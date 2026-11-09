@@ -1,0 +1,20 @@
+{
+  "frozen_at_utc": "2026-11-09T22:17:41+00:00",
+  "source_sha256": {
+    "pcf/evaluate_2026.py": "f107299dbf77e3b1ddc19e6fb262ff39c2f32fbcb7070bc9762d5b0753d90d79",
+    "pcf/forecast_value.py": "5501840cece8e97d677bccc7724f709eef8b0d0806e7e601892e6dfc1faf12a9",
+    "pcf/model.py": "ef2a402a3e9fe3d6fb957e162e7505699caf307d24b61ebb900bcaefe8411eb8",
+    "pcf/dataset.py": "c488503dbd9184c4c83b86ebfdb681e5461b19ee715c502023291d41e4e2e905",
+    "pcf/changes.py": "987196019fc7f3e9d6eb7f81a1b64989e33b4696fcbe527859764338c98b3b41",
+    "pcf/ingest.py": "72fcea42696c8972bc40c8134d6422dd2f91c072acbff4221cf2baa7809a4c29",
+    "pcf/freeze.py": "7f3bdbfdc9c988e6594db1915242f692977d183ef873047dd6c8b43999f596e9",
+    "experiments/evaluation_2026.json": "d30c25145c8390e37c2e6bcace8fdd51646ba4a8488a140d95f19f6e1d9b5d5e",
+    "pyproject.toml": "3a0c691debded60ed428731ccc190f4bed54c4be6acf0d9c6de0ef7cc8fd7eb8",
+    "uv.lock": "81b34145b082d6f52972f91c4efa966a6778e912c285c3471840b7a3382e4325",
+    "research_spec.json": "b2038e9abd9b586b5621536b07528bb834de05d3af9da06968fa36c4a653cb91",
+    "experiments/forecast_value.json": "41d2b8d467321dba17aa69b0b1970f09a2a06c4b65915b8b48d801eadfbf7938",
+    "artifacts/experiments/per_type_changes/changes.parquet": "4530624c5cc96157967a65a5bf08572574b4b156749abc343177897347d40511",
+    "data/processed/forecast_rows.parquet": "2c5c18f8e5eabb609cc546753ffa3d78d91fd57e8d84aed47ff716b173b1c256"
+  },
+  "rehearsal_report_sha256": "91627f3435947b0993e94c27f88a737dd26d9a79a2b451caf0ee1f2375541aaa"
+}

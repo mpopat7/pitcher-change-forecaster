@@ -117,11 +117,13 @@ def _row_seed(seed, pitcher, cutoff):
     return int.from_bytes(hashlib.sha256(key).digest()[:8], "little")
 
 
-def build_changes(outings, forecasts, *, n_boot=400, seed=SEED):
+def build_changes(outings, forecasts, *, n_boot=400, seed=SEED, seasons=(2021, 2024)):
+    """`seasons` defaults to development; only the frozen 2026 evaluation widens it."""
     if n_boot < 100:
         raise ValueError("Use at least 100 bootstrap draws")
-    if not forecasts.season.between(2021, 2024).all():
-        raise ValueError("This experiment is restricted to development seasons 2021-2024")
+    if not forecasts.season.between(*seasons).all():
+        label = "development seasons" if tuple(seasons) == (2021, 2024) else "evaluation seasons"
+        raise ValueError(f"This experiment is restricted to {label} {seasons[0]}-{seasons[1]}")
     by_pitcher = dict(tuple(outings.groupby("pitcher")))
     rows = []
     for f in forecasts.sort_values(["forecast_date", "pitcher"]).itertuples(index=False):

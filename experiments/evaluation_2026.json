@@ -1,0 +1,29 @@
+{
+  "experiment": "evaluation_2026_v1",
+  "purpose": "Score the development comparisons once on 2026 as a temporal and domain test. Report results regardless of direction.",
+  "train_seasons": [2021, 2022, 2023, 2024, 2025],
+  "test_season": 2026,
+  "download_window": ["2026-03-18", "2026-10-01"],
+  "rows": "Same forecast-row builder as the original study, rebuilt through 2026 into a separate file. The rebuilt 2021-2025 rows must equal the saved study rows exactly before any 2026 outcome is read.",
+  "per_type": "Same per-type measurement code and 400-draw outing bootstrap for 2025 and 2026; 2021-2024 reuse the saved development table. Priors fitted on 2021-2025 only.",
+  "models": {
+    "A": "Original A, C=0.001",
+    "B": "Original B, C=0.001",
+    "C": "Original C, C=0.001",
+    "V": "B plus chg_fb_velo, C=0.001",
+    "P": "B plus the eight per-type features, C=0.001",
+    "NB": "Gradient-boosted trees on B features, max_iter=100, development fixed settings",
+    "NP": "Gradient-boosted trees on P features, max_iter=100, development fixed settings",
+    "Bnz": "B without zone-rate features, C=0.001",
+    "Pnz": "P without zone-rate features, C=0.001"
+  },
+  "settings_rationale": "C=0.001 is the frozen original setting and the value development tuning chose for B, V, C and P in both folds; max_iter=100 is what development tuning chose for every nonlinear model. No 2026 tuning.",
+  "primary_comparisons": ["P-B", "V-B", "P-V", "NP-NB"],
+  "reference_comparisons": ["B-A", "C-B"],
+  "measurement_compatibility": "MLB documents 2026 plate-location and strike-zone definition changes. Primary models keep frozen feature lists. Sensitivity drops zone_rate_cur and chg_zone_rate: Pnz-Bnz and Bnz-B. Pitch labels unseen in training use the metric-pool prior.",
+  "repertoire_fallback": "Original rule fitted on 2021-2025 eligible rows; unsupported 2026 forecasts use A for every compared model.",
+  "audits": ["eligible, no-follow-up, and fallback counts", "per-type feature coverage", "league K% and BB% by season", "predicted minus observed totals for every model", "calibration deciles for A, B and P", "pitch-type label shares 2025 versus 2026", "zone-rate feature level by season"],
+  "scoring": "Binomial log loss per batter faced; pitcher-cluster bootstrap with 1000 draws; BF-weighted directional share.",
+  "rehearsal": "Before freezing, the identical code scores 2025 with 2021-2024 training as a pipeline check. 2025 was already inspected, so the rehearsal is descriptive only.",
+  "stop_rule": "Freeze sources and this design before downloading 2026. Run the 2026 scoring once; it refuses to overwrite its output. Report every comparison and audit."
+}

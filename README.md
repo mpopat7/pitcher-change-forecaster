@@ -356,6 +356,16 @@ Use 2021-2024 for development with chronological folds and a gap that keeps trai
 
 Before inspecting 2026 outcomes, freeze the features, targets, thresholds, model comparisons, and measurement-compatibility policy. Treat 2026 as a temporal and domain test: audit baseline calibration and coverage for both strikeouts and walks, then score the frozen comparisons once and report the results regardless of direction. If its outcomes have already been inspected during development, it cannot serve as an untouched test.
 
+The 2026 design is in [experiments/evaluation_2026.json](experiments/evaluation_2026.json), and [experiments/evaluation_2026_freeze.json](experiments/evaluation_2026_freeze.json) records the hashes of every source and saved input. It was frozen at 2026-11-09 22:17 UTC and committed before any 2026 data was downloaded. All models refit on 2021-2025 with settings fixed from development: C=0.001 for every linear model and 100 trees for the boosted pair. The primary comparisons are P - B, V - B, P - V, and NP - NB, with B - A and C - B repeated for reference. Because MLB documents 2026 changes to plate-location and strike-zone definitions, a declared sensitivity check drops the zone-rate features (Pnz - Bnz and Bnz - B). The run also audits coverage, league rates, expected-minus-observed totals, calibration, and pitch-label shares.
+
+```bash
+uv run python3 -m pcf.evaluate_2026 --rehearsal   # already run: 2025 pipeline check
+uv run python3 -m pcf.ingest --seasons 2026
+uv run python3 -m pcf.evaluate_2026               # scores 2026 once; refuses to rerun
+```
+
+The rehearsal scores 2025 with the identical code and 2021-2024 training. It reproduced the original holdout's A, B, and C losses and intervals exactly, which checks the pipeline. Because 2025 was already inspected, the rehearsal's new comparisons are descriptive. In that rehearsal, P - B, V - B, and NP - NB intervals all included zero for both targets. The rebuilt 2021-2025 forecast rows must also match the saved study rows before 2026 is scored. The `build_changes` season guard now takes an explicit range for this evaluation; development runs use the unchanged default.
+
 ### Present the evidence
 
 Evaluate MLB-wide before choosing examples. Add a browser team filter and Detroit/Cincinnati pages that distinguish the measured change, its uncertainty, later persistence, and forecast impact. Include unsuccessful and unresolved examples, and label cases selected after inspecting outcomes. Team attribution uses the last team the pitcher appeared for before each forecast.
