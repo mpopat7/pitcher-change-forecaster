@@ -1,0 +1,24 @@
+{
+  "experiment": "review_lists_v1",
+  "purpose": "Compare cutoff-only physical-change review lists with simple velocity-only and usage-only lists at equal review capacity. Development years only; no K/BB targets.",
+  "seasons": [2022, 2023, 2024],
+  "unit": "One pitcher on one reliability anchor date. Each method scores the anchor by its single strongest eligible pitch-type signal and records which type and metric triggered it.",
+  "support": "Known pitch label, finite change, and at least two outings with that type in both the recent and baseline windows. The same support floor applies to every method.",
+  "methods": {
+    "physical": "Max over velocity, horizontal and vertical movement of |shrunk change| / sqrt(prior variance); prior variance must be positive and come from earlier seasons only.",
+    "velocity_only": "Max |raw velocity change| in mph across pitch types.",
+    "usage_only": "Max |raw usage change| across pitch types."
+  },
+  "capacities": [0.01, 0.02, 0.05, 0.1, 0.2],
+  "capacity_base": "Fraction of all anchors in that season, rounded to the nearest whole pitcher; every method flags the same number per season.",
+  "ties": "Higher score first, then pitcher id, then pitch type and metric in alphabetical order.",
+  "resolved": "Triggering pitch type and metric measured in the next 30 days with at least two future outings. Usage resolves to zero when the pitcher appears but does not throw the type; physical metrics stay unresolved then.",
+  "persistence": "Signed retention (future - baseline) * sign(change) / |change| >= threshold, scored on the triggering metric.",
+  "primary_threshold": 0.5,
+  "sensitivity_thresholds": [0.25, 0.75],
+  "rates": ["persisted / resolved", "persisted / flagged (unresolved counted as not persisted)"],
+  "uncertainty": "Pitcher-cluster bootstrap over the fixed lists, 400 draws, for each method's resolved persistence rate and for physical minus each comparator. Lists are held fixed; ranking uncertainty is not propagated.",
+  "seed": 20261109,
+  "caveats": "Retention is measured against the same baseline used to compute the change, so baseline noise inflates every list's rate. Compare lists with each other and with the all-eligible rate, not as absolute persistence probabilities. Persistence of a physical measurement does not imply better strikeouts or walks.",
+  "stop_rule": "Run once on the saved reliability measurements. Report every capacity and threshold. Choose no alert cutoff from this run."
+}

@@ -8,7 +8,7 @@ This project uses public MLB Statcast data to compare forecasts based on past re
 
 The frozen specification was evaluated once on the 2025 holdout. Current pitch measurements modestly improve strikeout forecasts over the results-only baseline; adding recent-change features makes strikeout forecasts slightly worse and shows no clear walk benefit. A local historical forecast browser now covers every eligible 2024 and 2025 forecast, with pitch histories, model comparisons, and experimental alert outcomes. All 2020-2025 data is downloaded and passes the game-level audit.
 
-The per-type experiment measures 27,544 eligible development forecasts from 2021-2024, with sample counts and Detroit/Cincinnati examples. Reliability checks found poor interval calibration. A fixed comparison found that Welch-style t intervals improve some cases but leave substantial failures. Neither method establishes a reliable change alert. Shrinkage gives a small development gain for next-month velocity prediction; movement and usage gains remain uncertain. K%/BB% forecasting tests remain ahead. The original specification and saved results stay frozen.
+The per-type experiment measures 27,544 eligible development forecasts from 2021-2024, with sample counts and Detroit/Cincinnati examples. Reliability checks found poor interval calibration. A fixed comparison found that Welch-style t intervals improve some cases but leave substantial failures. Neither method establishes a reliable change alert. At equal review capacity, a shrunk physical-change list keeps its recent level somewhat more often than raw velocity or usage lists. Shrinkage gives a small development gain for next-month velocity prediction; movement and usage gains remain uncertain. K%/BB% forecasting tests remain ahead. The original specification and saved results stay frozen.
 
 ## Running it
 
@@ -300,7 +300,27 @@ The known-truth stress tests still expose failures: with ten recent and two base
 
 Outputs are under `artifacts/experiments/interval_calibration/`, including every simulated interval, cell-level coverage and sensitivity summaries, support reasons, the design and input fingerprints, and a report. The command refuses to overwrite a run. This completes the declared grid; further methods would need a separate design. Both interval methods remain descriptive. Background: [SciPy's Welch reference](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html) and [research on inference with clustered errors](https://www.nber.org/papers/t0344); neither validates this baseball application.
 
-Compare physical-change review lists against velocity-only and usage-only lists at the same review capacity, showing results across list sizes. Score these lists on physical persistence and keep missing follow-up visible. A persistent physical change is a separate finding from an improvement in strikeouts or walks.
+### Compare review lists
+
+The fixed design is in [experiments/review_lists.json](experiments/review_lists.json):
+
+```bash
+uv run python3 -m pcf.review_lists
+```
+
+Each list ranks pitchers on the 2022-2024 reliability dates using only information before the forecast. The physical list uses the largest shrunk velocity or movement change, scaled by its earlier-season prior. The comparators use the largest raw velocity change and the largest raw usage change. All three need at least two outings with the pitch type in both windows and flag the same number of pitchers each season. A flag persists when the next 30 days stay at least halfway from the old baseline toward the recent level on the triggering metric. Flags without two later outings stay in the counts as unresolved.
+
+| Review capacity | Physical, persisted / resolved | Velocity-only | Usage-only | Persisted / all flags (physical, velocity, usage) |
+|---:|---:|---:|---:|---|
+| 1% (46 per list) | 97.0% | 84.2% | 83.7% | 69.6%, 69.6%, 78.3% |
+| 5% (231) | 91.6% | 85.6% | 77.7% | 75.3%, 69.7%, 72.3% |
+| 10% (462) | 89.1% | 82.9% | 74.6% | 76.0%, 67.1%, 68.2% |
+| 20% (925) | 83.5% | 80.3% | 72.6% | 71.6%, 66.8%, 65.4% |
+| All eligible (4,624) | 72.4% | 69.3% | 62.0% | 63.4%, 60.2%, 56.4% |
+
+At 5% and 10% capacity, the physical list's resolved rate was higher than velocity-only by about 6 points (pitcher-bootstrap intervals +0.4 to +12.5 and +2.2 to +9.9). At 1%, 2%, and 20% the intervals approach or cross zero. Part of the gap with usage-only is a difference between metrics: across all eligible dates, physical triggers already persist 10 points more often than usage triggers. Physical flags are also unresolved more often, because a pitcher who stops throwing a pitch gives no physical measurement for it. When unresolved flags count as failures, usage-only leads at 1% and physical ties velocity-only; at 5-20% the physical advantage narrows to about 3-9 points. The 0.25 and 0.75 thresholds mostly keep the same order, but velocity-only slightly edges the physical list at 2% (0.25 threshold) and 20% (0.75 threshold).
+
+Retention is measured against the same baseline used to compute the change, so baseline noise inflates every rate. The numbers compare lists with each other; they are not probabilities that a change is real. Lists are held fixed in the bootstrap. A persistent physical change is a separate finding from an improvement in strikeouts or walks. Outputs are under `artifacts/experiments/review_lists/`.
 
 ### Test forecasting value
 
