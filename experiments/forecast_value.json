@@ -1,0 +1,43 @@
+{
+  "experiment": "forecast_value_v1",
+  "purpose": "Test whether per-type change features improve next-30-day K% and BB% forecasts beyond a matched baseline with the same current pitch measurements and results history. Development seasons only.",
+  "folds": [
+    {"train": [2021, 2022], "tune_train": [2021], "tune_valid": 2022, "test": 2023},
+    {"train": [2021, 2022, 2023], "tune_train": [2021, 2022], "tune_valid": 2023, "test": 2024}
+  ],
+  "gap": "Outcome windows end inside their own season, so no training outcome window crosses a test-season cutoff.",
+  "targets": ["k", "bb"],
+  "linear_models": {
+    "B": "Original B: results history plus current pitch characteristics and usage.",
+    "V": "B plus the original fastball velocity change (chg_fb_velo); the simple velocity-change baseline.",
+    "C": "Original C: B plus every original pitch-group change feature. Reference only.",
+    "P": "B plus the per-type change features below. The central comparison is P versus B."
+  },
+  "per_type_features": {
+    "pt_fb_velo": "Shrunk velocity change of the primary fastball (FF, SI or FA with the most baseline usage).",
+    "pt_fb_ivb": "Shrunk vertical movement change of the primary fastball.",
+    "pt_fb_hb": "Shrunk arm-side movement change of the primary fastball.",
+    "pt_other_velo": "Baseline-usage-weighted shrunk velocity change across non-fastball types.",
+    "pt_other_move": "Baseline-usage-weighted mean of |shrunk hb change| + |shrunk ivb change| across non-fastball types.",
+    "pt_usage_shift": "Half the summed absolute usage change across all types, including unknown labels.",
+    "pt_new_usage": "Recent usage of types absent from the baseline window.",
+    "pt_max_z": "Largest |shrunk physical change| / sqrt(prior variance); the review-list score."
+  },
+  "per_type_support": "Physical features need a known label, both windows, and at least two outings with the type in each window; otherwise missing.",
+  "shrinkage": "Noise variance from the saved 95% outing-bootstrap interval, ((high - low) / 3.92)^2. Zero-centered prior per metric and pitch type, mean(delta^2 - noise variance) clipped at zero, fitted on the fold's training seasons only; metric pool when fewer than two training pitchers. Features use no outcomes.",
+  "linear_tuning": "Inverse regularization C from [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0], chosen by log loss on the inner validation season, then refit on all training seasons.",
+  "nonlinear": {
+    "model": "sklearn HistGradientBoostingClassifier on binomial counts (two weighted rows per forecast).",
+    "comparison": "NB (B features) versus NP (P features), same tuning budget.",
+    "fixed": {"learning_rate": 0.05, "max_depth": 3, "min_samples_leaf": 200, "l2_regularization": 1.0, "max_bins": 64},
+    "tuning": "max_iter from [100, 200, 400], chosen on the inner validation season. Six candidate fits per model, target and fold; no further tuning."
+  },
+  "repertoire_fallback": "Original rule, fitted per fold on eligible training rows: forecasts outside observed training usage ranges use model A for every compared model.",
+  "scoring": "Binomial log loss per batter faced over rows with follow-up; rows without follow-up reported, not scored.",
+  "comparisons": ["P-B", "V-B", "C-B", "P-V", "NP-NB", "NP-P"],
+  "uncertainty": "Pitcher-cluster bootstrap, 1000 draws, on pooled 2023-2024 test rows; also per fold.",
+  "directional": "Among scored rows, BF-weighted share where the change model's move away from B points toward the observed rate.",
+  "subgroups": "Exploratory: starters (start_share >= 0.5) versus relievers; forecasts with versus without a supported primary-fastball change.",
+  "seed": 20261109,
+  "stop_rule": "Run once. Report every comparison regardless of direction. Do not add features or tuning after seeing results. No 2025 or 2026 rows are read."
+}

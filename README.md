@@ -8,7 +8,7 @@ This project uses public MLB Statcast data to compare forecasts based on past re
 
 The frozen specification was evaluated once on the 2025 holdout. Current pitch measurements modestly improve strikeout forecasts over the results-only baseline; adding recent-change features makes strikeout forecasts slightly worse and shows no clear walk benefit. A local historical forecast browser now covers every eligible 2024 and 2025 forecast, with pitch histories, model comparisons, and experimental alert outcomes. All 2020-2025 data is downloaded and passes the game-level audit.
 
-The per-type experiment measures 27,544 eligible development forecasts from 2021-2024, with sample counts and Detroit/Cincinnati examples. Reliability checks found poor interval calibration. A fixed comparison found that Welch-style t intervals improve some cases but leave substantial failures. Neither method establishes a reliable change alert. At equal review capacity, a shrunk physical-change list keeps its recent level somewhat more often than raw velocity or usage lists. Shrinkage gives a small development gain for next-month velocity prediction; movement and usage gains remain uncertain. K%/BB% forecasting tests remain ahead. The original specification and saved results stay frozen.
+The per-type experiment measures 27,544 eligible development forecasts from 2021-2024, with sample counts and Detroit/Cincinnati examples. Reliability checks found poor interval calibration. A fixed comparison found that Welch-style t intervals improve some cases but leave substantial failures. Neither method establishes a reliable change alert. At equal review capacity, a shrunk physical-change list keeps its recent level somewhat more often than raw velocity or usage lists. Shrinkage gives a small development gain for next-month velocity prediction; movement and usage gains remain uncertain. In 2023-2024 development folds, per-type change features, a simple velocity change, and a gradient-boosted model all left next-month K% and BB% forecasts statistically unchanged. The original specification and saved results stay frozen.
 
 ## Running it
 
@@ -327,6 +327,28 @@ Retention is measured against the same baseline used to compute the change, so b
 Compare per-type change features with a matched baseline that has the same current pitch measurements and results history. Include simple velocity-change and historical baselines. Examine paired forecast losses and directional errors, with workload, measurement support, and missing follow-up reported. Any subgroup findings are exploratory.
 
 Run one predeclared nonlinear comparison to test thresholds and interactions, with a bounded tuning budget and the same baseline information. Report it even if the linear comparison finds no benefit. Future whiffs per swing can support the analysis, but their noise must be measured and they do not replace the K% and BB% targets. Historical whiff rate is already part of the results baseline.
+
+The fixed design is in [experiments/forecast_value.json](experiments/forecast_value.json):
+
+```bash
+uv run python3 -m pcf.forecast_value
+```
+
+Model P adds eight per-type features to the original model B: shrunk velocity and movement changes for the primary fastball, usage-weighted velocity and movement changes for the other pitches, the total usage shift, usage of newly appearing pitches, and the review-list score. Shrinkage priors come from each fold's training seasons only. Model V adds only the original fastball velocity change to B. The nonlinear pair fits gradient-boosted trees on B's features (NB) and P's features (NP) with the same three-setting budget. Two chronological folds test 2023 and 2024; each model picks its setting on the preceding season and refits on all training seasons. Of 13,642 eligible forecasts, 859 had no follow-up and are not scored; 35 used the original repertoire fallback to model A.
+
+Pooled over 12,783 scored 2023-2024 forecasts (log loss per batter faced; negative favors the first model):
+
+| Target | Comparison | Difference (95% pitcher interval) | Changed forecasts moving toward the outcome |
+|---|---|---|---:|
+| K% | P - B | -0.000010 (-0.000038 to +0.000017) | 52.6% |
+| K% | V - B | -0.000012 (-0.000029 to +0.000003) | 52.0% |
+| K% | P - V | +0.000002 (-0.000020 to +0.000025) | 51.7% |
+| K% | NP - NB | -0.000001 (-0.000023 to +0.000020) | 52.0% |
+| BB% | P - B | +0.000006 (-0.000026 to +0.000037) | 50.1% |
+| BB% | V - B | +0.000005 (-0.000015 to +0.000026) | 50.6% |
+| BB% | NP - NB | +0.000009 (-0.000009 to +0.000028) | 49.9% |
+
+Every interval includes zero, in both folds and in the exploratory starter, reliever, and fastball-support subgroups. Every pooled difference is below 0.01% of baseline loss. Per-type features did no better than the single fastball velocity change, and the nonlinear model found no thresholds or interactions that the linear model missed. The original group-level C was slightly worse than B for strikeouts, as in the 2025 holdout. Inner validation chose the strongest regularization and the smallest tree budget on the grid for nearly every model, which suggests the extra features carry little signal; the stop rule keeps the grid fixed. Whiffs per swing were not added as a supporting target. Outputs are under `artifacts/experiments/forecast_value/`.
 
 ### Evaluate on a separate season
 
