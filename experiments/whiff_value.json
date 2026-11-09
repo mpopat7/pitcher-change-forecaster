@@ -1,0 +1,28 @@
+{
+  "experiment": "whiff_value_v1",
+  "purpose": "Test whether recent pitch changes improve next-30-day whiffs-per-swing forecasts, overall and for the changed pitch type itself. Swing-and-miss responds to pitch quality faster and with less noise than K% and BB%.",
+  "definitions": "Swings and whiffs use the study's existing Statcast description sets (pcf.dataset.SWINGS, WHIFFS). Whiffs per swing over the forecast date through 29 days later, regular season only.",
+  "targets": {
+    "overall": "Pitcher's whiffs / swings on all pitches in the next 30 days.",
+    "per_type": "Pitcher's whiffs / swings on one pitch type in the next 30 days."
+  },
+  "development_folds": [
+    {"train": [2021, 2022], "tune_train": [2021], "tune_valid": 2022, "test": 2023},
+    {"train": [2021, 2022, 2023], "tune_train": [2021, 2022], "tune_valid": 2023, "test": 2024}
+  ],
+  "overall_models": "Same A, B, V, C, P and boosted NB/NP as forecast_value_v1, refit on the whiff target. The A results history already includes recent, season-to-date and prior-season whiff rates.",
+  "per_type_unit": "One pitcher, forecast date and known pitch type thrown in both windows with at least two outings each (the review-list support floor). Scored when the next 30 days contain at least one swing on that type.",
+  "per_type_models": {
+    "Bt": "Pitcher-level B features plus the type's group (fastball, cutter, breaking, offspeed), its recent velocity, vertical and arm-side movement, recent usage, and the type's own shrunk whiff rate over the last 30 days, season to date, and prior season, with log swing counts.",
+    "Pt": "Bt plus the type's shrunk velocity, vertical and arm-side movement changes, each interacted with the four pitch groups, plus its usage change and its prior-scaled change score.",
+    "NBt/NPt": "Gradient-boosted trees on Bt and Pt features, so interactions are learned rather than declared."
+  },
+  "type_whiff_shrinkage": "(whiffs + 50 x league whiff rate) / (swings + 50), league rate from training seasons.",
+  "shrinkage": "Physical-change priors as in forecast_value_v1: zero-centered, fitted on each fold's training seasons only.",
+  "tuning": "Linear C from [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0]; boosted max_iter from [100, 200, 400] with the fixed forecast_value_v1 tree settings; chosen on the inner validation season, then refit.",
+  "comparisons": {"overall": ["P-B", "V-B", "P-V", "NP-NB", "B-A"], "per_type": ["Pt-Bt", "NPt-NBt"]},
+  "scoring": "Binomial log loss per swing; pitcher-cluster bootstrap with 1000 draws; swing-weighted directional share.",
+  "subgroups": "Exploratory per-type results by pitch group, and for rows whose prior-scaled change score is at least 2 (large measured changes).",
+  "evaluation": "After development, freeze sources and settings (each model's 2024-fold choice), then score 2025 (train 2021-2024) and 2026 (train 2021-2025) once. Their K% results were already inspected and strikeouts correlate with whiffs, so these seasons are not fully untouched; report that limit.",
+  "stop_rule": "Run development once, freeze, score the evaluation seasons once. Report every comparison regardless of direction; no feature or tuning changes after results."
+}

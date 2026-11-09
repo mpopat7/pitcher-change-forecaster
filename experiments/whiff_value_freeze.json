@@ -1,0 +1,34 @@
+{
+  "frozen_at_utc": "2026-11-09T23:04:05+00:00",
+  "settings": {
+    "overall_A": 0.001,
+    "overall_B": 0.001,
+    "overall_C": 0.001,
+    "overall_V": 0.001,
+    "overall_P": 0.001,
+    "overall_NB": 200,
+    "overall_NP": 200,
+    "per_type_Bt": 0.001,
+    "per_type_Pt": 0.001,
+    "per_type_NBt": 200,
+    "per_type_NPt": 200
+  },
+  "settings_source": "development fold testing 2024",
+  "source_sha256": {
+    "pcf/whiff_value.py": "a50ca730181bedcdc83d84dfe8a322a028e0642e9942430d460e3d6a8f8579f8",
+    "pcf/forecast_value.py": "5501840cece8e97d677bccc7724f709eef8b0d0806e7e601892e6dfc1faf12a9",
+    "pcf/model.py": "ef2a402a3e9fe3d6fb957e162e7505699caf307d24b61ebb900bcaefe8411eb8",
+    "pcf/dataset.py": "c488503dbd9184c4c83b86ebfdb681e5461b19ee715c502023291d41e4e2e905",
+    "pcf/changes.py": "987196019fc7f3e9d6eb7f81a1b64989e33b4696fcbe527859764338c98b3b41",
+    "pcf/evaluate_2026.py": "f107299dbf77e3b1ddc19e6fb262ff39c2f32fbcb7070bc9762d5b0753d90d79",
+    "experiments/whiff_value.json": "6706a18c5603397f641bed2f7bfa93476943b4a6462cc7b04c2296addb208f2d",
+    "experiments/forecast_value.json": "41d2b8d467321dba17aa69b0b1970f09a2a06c4b65915b8b48d801eadfbf7938",
+    "pyproject.toml": "3a0c691debded60ed428731ccc190f4bed54c4be6acf0d9c6de0ef7cc8fd7eb8",
+    "uv.lock": "81b34145b082d6f52972f91c4efa966a6778e912c285c3471840b7a3382e4325",
+    "research_spec.json": "b2038e9abd9b586b5621536b07528bb834de05d3af9da06968fa36c4a653cb91",
+    "artifacts/experiments/per_type_changes/changes.parquet": "4530624c5cc96157967a65a5bf08572574b4b156749abc343177897347d40511",
+    "data/processed/forecast_rows.parquet": "2c5c18f8e5eabb609cc546753ffa3d78d91fd57e8d84aed47ff716b173b1c256",
+    "data/processed/forecast_rows_2026.parquet": "950a4bf20c82e44e1c986e24de90e5f37b875b9ac4408c4e8b857a1920728326"
+  },
+  "development_report_sha256": "67ed87375e7dc913f24dd4c259318caed31344a06645a8ba5b1889c11659961d"
+}
