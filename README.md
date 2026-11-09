@@ -8,7 +8,7 @@ This project uses public MLB Statcast data to compare forecasts based on past re
 
 The frozen specification was evaluated once on the 2025 holdout. Current pitch measurements modestly improve strikeout forecasts over the results-only baseline; adding recent-change features makes strikeout forecasts slightly worse and shows no clear walk benefit. A local historical forecast browser now covers every eligible 2024 and 2025 forecast, with pitch histories, model comparisons, and experimental alert outcomes. All 2020-2025 data is downloaded and passes the game-level audit.
 
-The per-type experiment measures 27,544 eligible development forecasts from 2021-2024, with sample counts and Detroit/Cincinnati examples. Reliability checks found poor interval calibration. A fixed comparison found that Welch-style t intervals improve some cases but leave substantial failures. Neither method establishes a reliable change alert. At equal review capacity, a shrunk physical-change list keeps its recent level somewhat more often than raw velocity or usage lists. Shrinkage gives a small development gain for next-month velocity prediction; movement and usage gains remain uncertain. In 2023-2024 development folds, per-type change features, a simple velocity change, and a gradient-boosted model all left next-month K% and BB% forecasts statistically unchanged. The original specification and saved results stay frozen.
+The per-type experiment measures 27,544 eligible development forecasts from 2021-2024, with sample counts and Detroit/Cincinnati examples. Reliability checks found poor interval calibration. A fixed comparison found that Welch-style t intervals improve some cases but leave substantial failures. Neither method establishes a reliable change alert. At equal review capacity, a shrunk physical-change list keeps its recent level somewhat more often than raw velocity or usage lists. Shrinkage gives a small development gain for next-month velocity prediction; movement and usage gains remain uncertain. In 2023-2024 development folds, per-type change features, a simple velocity change, and a gradient-boosted model all left next-month K% and BB% forecasts statistically unchanged. A frozen 2026 test, scored once, gave the same answer: current pitch characteristics improved both strikeout and walk forecasts, while recent-change features did not. The original specification and saved results stay frozen.
 
 ## Running it
 
@@ -365,6 +365,28 @@ uv run python3 -m pcf.evaluate_2026               # scores 2026 once; refuses to
 ```
 
 The rehearsal scores 2025 with the identical code and 2021-2024 training. It reproduced the original holdout's A, B, and C losses and intervals exactly, which checks the pipeline. Because 2025 was already inspected, the rehearsal's new comparisons are descriptive. In that rehearsal, P - B, V - B, and NP - NB intervals all included zero for both targets. The rebuilt 2021-2025 forecast rows must also match the saved study rows before 2026 is scored. The `build_changes` season guard now takes an explicit range for this evaluation; development runs use the unchanged default.
+
+#### 2026 result
+
+The 2026 download holds 716,792 regular-season pitches from 2,429 games (March 25 to September 27). The rebuilt 2021-2025 forecast rows matched the saved study rows, and the frozen hashes were checked before scoring. The run took place once, on 2026-11-09. Of 6,795 eligible forecasts, 396 had no follow-up; 6,399 were scored across 532 pitchers, and one used the repertoire fallback.
+
+| Target | Comparison | Difference per BF (95% pitcher interval) |
+|---|---|---|
+| K% | P - B | -0.000016 (-0.000048 to +0.000018) |
+| K% | V - B | -0.000015 (-0.000042 to +0.000010) |
+| K% | NP - NB | +0.000003 (-0.000017 to +0.000022) |
+| K% | B - A | -0.000272 (-0.000463 to -0.000097) |
+| K% | C - B | -0.000016 (-0.000073 to +0.000045) |
+| BB% | P - B | +0.000015 (-0.000009 to +0.000040) |
+| BB% | V - B | -0.000015 (-0.000036 to +0.000002) |
+| BB% | P - V | +0.000030 (+0.000005 to +0.000057) |
+| BB% | NP - NB | +0.000001 (-0.000008 to +0.000012) |
+| BB% | B - A | -0.000205 (-0.000318 to -0.000089) |
+| BB% | Bnz - B | +0.000194 (+0.000097 to +0.000296) |
+
+The 2026 test agrees with development. Per-type change features, the simple velocity change, and the boosted model did not improve strikeout or walk forecasts; for walks, P was slightly worse than the velocity-only model. Current pitch characteristics (B over A) improved both strikeout and walk forecasts; the walk gain matches the 2024 validation, while the 2025 holdout's walk interval included zero. Original C was indistinguishable from B.
+
+The domain audit shows the documented measurement change: the mean recent zone rate fell from 0.510 in 2025 to 0.477, the lowest of the period. League walk rate in the forecast windows rose to 8.09%, also the period high, and the results-only model under-predicted walks by 3.9%. B's total walk error was -0.8%. Dropping the zone-rate features made walk forecasts clearly worse (Bnz - B above) and left walks under-predicted by 4.2%, so the zone features stayed useful despite the definition change. Strikeout totals were within 0.2% for B, C, V, and P. Per-type feature coverage was 97%, and pitch-label shares moved by at most about 1.4 percentage points. Full outputs are under `artifacts/experiments/evaluation_2026/`.
 
 ### Present the evidence
 
