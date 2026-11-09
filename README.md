@@ -8,7 +8,7 @@ This project uses public MLB Statcast data to compare forecasts based on past re
 
 The frozen specification was evaluated once on the 2025 holdout. Current pitch measurements modestly improve strikeout forecasts over the results-only baseline; adding recent-change features makes strikeout forecasts slightly worse and shows no clear walk benefit. A local historical forecast browser now covers every eligible 2024 and 2025 forecast, with pitch histories, model comparisons, and experimental alert outcomes. All 2020-2025 data is downloaded and passes the game-level audit.
 
-The per-type experiment measures 27,544 eligible development forecasts from 2021-2024, with sample counts and Detroit/Cincinnati examples. Reliability checks found poor interval calibration. A fixed comparison found that Welch-style t intervals improve some cases but leave substantial failures. Neither method establishes a reliable change alert. At equal review capacity, a shrunk physical-change list keeps its recent level somewhat more often than raw velocity or usage lists. Shrinkage gives a small development gain for next-month velocity prediction; movement and usage gains remain uncertain. In 2023-2024 development folds, per-type change features, a simple velocity change, and a gradient-boosted model all left next-month K% and BB% forecasts statistically unchanged. A frozen 2026 test, scored once, gave the same answer: current pitch characteristics improved both strikeout and walk forecasts, while recent-change features did not. The original specification and saved results stay frozen.
+The per-type experiment measures 27,544 eligible development forecasts from 2021-2024, with sample counts and Detroit/Cincinnati examples. Reliability checks found poor interval calibration. A fixed comparison found that Welch-style t intervals improve some cases but leave substantial failures. Neither method establishes a reliable change alert. At equal review capacity, a shrunk physical-change list keeps its recent level somewhat more often than raw velocity or usage lists. Shrinkage gives a small development gain for next-month velocity prediction; movement and usage gains remain uncertain. In 2023-2024 development folds, per-type change features, a simple velocity change, and a gradient-boosted model all left next-month K% and BB% forecasts statistically unchanged. A frozen 2026 test, scored once, gave the same answer: current pitch characteristics improved both strikeout and walk forecasts, while recent-change features did not. A swing-and-miss follow-up, overall and for the changed pitch itself, also found no measurable benefit. The original specification and saved results stay frozen.
 
 ## Running it
 
@@ -349,6 +349,29 @@ Pooled over 12,783 scored 2023-2024 forecasts (log loss per batter faced; negati
 | BB% | NP - NB | +0.000009 (-0.000009 to +0.000028) | 49.9% |
 
 Every interval includes zero, in both folds and in the exploratory starter, reliever, and fastball-support subgroups. Every pooled difference is below 0.01% of baseline loss. Per-type features did no better than the single fastball velocity change, and the nonlinear model found no thresholds or interactions that the linear model missed. The original group-level C was slightly worse than B for strikeouts, as in the 2025 holdout. Inner validation chose the strongest regularization and the smallest tree budget on the grid for nearly every model, which suggests the extra features carry little signal; the stop rule keeps the grid fixed. Whiffs per swing were not added as a supporting target. Outputs are under `artifacts/experiments/forecast_value/`.
+
+### Swing-and-miss follow-up
+
+Whiffs per swing respond to pitch quality faster and with less noise than K% and BB%, so a follow-up repeated the comparison on that target. The design is in [experiments/whiff_value.json](experiments/whiff_value.json):
+
+```bash
+uv run python3 -m pcf.whiff_value              # development folds
+uv run python3 -m pcf.whiff_value --freeze
+uv run python3 -m pcf.whiff_value --evaluate   # 2025 and 2026, once
+```
+
+The overall test predicts a pitcher's next-30-day whiffs per swing with the same models as the K%/BB% experiment. The per-type test predicts whiffs per swing on one pitch type, using that pitch's own shrunk velocity and movement changes, interacted with its pitch group, against a matched baseline. The baseline already includes the pitch's current measurements, usage, and recent, season-to-date, and prior-season whiff rates. Development used the same 2023 and 2024 folds. Settings were then frozen from the 2024 fold and committed before 2025 and 2026 were scored once. Those two seasons' K% results had already been inspected, and strikeouts track whiffs, so they are not fully untouched tests.
+
+| Target | Comparison | Development 2023-2024 | Evaluation 2025-2026 |
+|---|---|---|---|
+| Overall whiffs/swing | P - B | +0.000006 (-0.000014 to +0.000026) | +0.000005 (-0.000008 to +0.000018) |
+| Overall whiffs/swing | V - B | -0.000003 (-0.000008 to +0.000001) | -0.000006 (-0.000012 to +0.000001) |
+| Overall whiffs/swing | NP - NB | -0.000001 (-0.000018 to +0.000014) | +0.000004 (-0.000008 to +0.000017) |
+| Overall whiffs/swing | B - A | -0.000113 (-0.000196 to -0.000019) | -0.000120 (-0.000210 to -0.000041) |
+| Same-pitch whiffs/swing | Pt - Bt | -0.000039 (-0.000201 to +0.000041) | -0.000020 (-0.000040 to +0.000002) |
+| Same-pitch whiffs/swing | NPt - NBt | -0.000007 (-0.000038 to +0.000023) | -0.000006 (-0.000025 to +0.000014) |
+
+Values are log-loss differences per swing with 95% pitcher-bootstrap intervals; negative favors the first model. Recent changes did not measurably improve whiff forecasts overall or for the changed pitch. The same-pitch linear comparison came closest, but its evaluation interval still includes zero and the point estimate is under 0.01% of baseline loss. Current pitch characteristics again improved forecasts. Among exploratory pitch groups in evaluation, only cutters excluded zero (-0.000118, interval -0.000212 to -0.000022, 4,758 rows). Cutters were null in development and were one of four groups tested, so this is a lead for a future season, not a finding. Larger measured changes (prior-scaled score of at least 2) showed no benefit in either period. Outputs are under `artifacts/experiments/whiff_value/` and `artifacts/experiments/whiff_value_evaluation/`.
 
 ### Evaluate on a separate season
 
