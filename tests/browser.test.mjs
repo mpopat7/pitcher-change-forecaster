@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { displayName, exportCsv, filterRows, historyThrough, readState } from "../web/data.mjs";
+import { displayName, exportCsv, filterRows, flagStatus, historyThrough, readState, teamFlags, teamOptions } from "../web/data.mjs";
 import { chartValue, forecastChart } from "../web/charts.mjs";
 
 const state = { date:"2025-06-02", query:"", role:"all", view:"watchlist", sort:"performance_rank", direction:1 };
@@ -60,4 +60,26 @@ test("missing pitch measurements do not become a zero-valued history", () => {
   const html = forecastChart([{ forecast_date:"2025-06-02",fb_velo_cur:null }],false,"velocity");
   assert.ok(html.includes("No measurements available"));
   assert.ok(!html.includes("<svg"));
+});
+
+test("team filter keeps last-team attribution and survives deep links", () => {
+  const teamed = rows.map((row, index) => ({ ...row, team:index === 1 ? "DET" : "CIN" }));
+  assert.deepEqual(filterRows(teamed,{ ...state,view:"all",team:"DET" }).map(row => row.pitcher), [2]);
+  assert.equal(filterRows(teamed,{ ...state,view:"all",team:"all" }).length,2);
+  assert.deepEqual(teamOptions(teamed), ["CIN","DET"]);
+  assert.equal(readState("?team=DET").team,"DET");
+  assert.equal(readState("?team=<x>").team,"all");
+});
+
+test("team flags hide persistence until outcomes are revealed and keep unresolved cases", () => {
+  const flags = [
+    { team:"DET", pitcher:2, forecast_date:"2023-05-01", resolved:true, retention:0.8 },
+    { team:"DET", pitcher:1, forecast_date:"2023-05-01", resolved:false, retention:null },
+    { team:"CIN", pitcher:3, forecast_date:"2022-05-01", resolved:true, retention:0.1 },
+  ];
+  assert.deepEqual(teamFlags(flags,"DET").map(row => row.pitcher), [1,2]);
+  assert.equal(flagStatus(flags[0],false),"hidden");
+  assert.equal(flagStatus(flags[0],true),"persisted");
+  assert.equal(flagStatus(flags[1],true),"unresolved");
+  assert.equal(flagStatus(flags[2],true),"faded");
 });

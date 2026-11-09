@@ -1,4 +1,4 @@
-import { PAGE_SIZE, displayName, exportCsv, filterRows, historyThrough, readState } from "./data.mjs";
+import { PAGE_SIZE, TEAM_PAGES, displayName, exportCsv, filterRows, flagStatus, historyThrough, readState, teamFlags, teamOptions } from "./data.mjs";
 import { HISTORY_METRICS, chartValue, forecastChart } from "./charts.mjs";
 
 const $ = selector => document.querySelector(selector);
@@ -11,8 +11,10 @@ const roleLabel = row => row.start_share >= 0.5 ? "Starter" : "Reliever";
 const resolutionLabel = value => ({ confirmed:"Confirmed", false_alert:"False alert", unresolved:"Unresolved" })[value] || "No alert";
 const titles = { watchlist:"Performance watchlist", all:"All eligible pitchers", alerts:"Experimental alerts", misses:"Largest forecast misses" };
 let state = readState(location.search);
+const initialTeam = state.team;
 let manifest, rows = [], filtered = [], current = null, controller;
 let historyMetric = "forecast";
+let teamData = null, teamPage = initialTeam === "CIN" ? "CIN" : "DET";
 const bundledElement = document.getElementById("saved-study");
 const bundled = bundledElement ? JSON.parse(bundledElement.textContent) : null;
 
@@ -36,6 +38,7 @@ function persist(push = false) {
   if (state.reveal) params.set("outcomes","1");
   if (state.query) params.set("q",state.query);
   if (state.role !== "all") params.set("role",state.role);
+  if (state.team !== "all") params.set("team",state.team);
   const url = `${location.pathname}?${params}`;
   if (url !== `${location.pathname}${location.search}`) history[push ? "pushState" : "replaceState"](null,"",url);
 }
@@ -48,6 +51,10 @@ function renderControls() {
   $("#outcomes").checked = state.reveal;
   $("#search").value = state.query;
   $("#role").value = state.role;
+  const teams = teamOptions(rows);
+  if (state.team !== "all" && !teams.includes(state.team)) state.team = "all";
+  $("#team").innerHTML = `<option value="all">All teams</option>${teams.map(team => `<option value="${escape(team)}">${escape(team)}</option>`).join("")}`;
+  $("#team").value = state.team;
   const index = dates.indexOf(state.date);
   $("#previous-date").disabled = index <= 0;
   $("#next-date").disabled = index < 0 || index >= dates.length - 1;
@@ -63,6 +70,7 @@ async function loadSeason() {
   $("#load-error").hidden = true;
   try {
     if (!manifest) manifest = await fetchJson("data/manifest.json",signal);
+    if (!teamData) teamData = await fetchJson("data/teams.json",signal);
     const loaded = await fetchJson(`data/${state.season}.json`,signal);
     if (signal.aborted) return;
     rows = loaded.data.map(values => Object.fromEntries(loaded.columns.map((key,index) => [key,values[index]])));
@@ -156,6 +164,26 @@ function renderStudy() {
   $("#study-results").innerHTML = `<div class="study-heading"><h3>${state.season} · ${season.label}</h3><p>Log loss per batter faced · lower is better</p></div><table class="model-table"><thead><tr><th scope="col">Model</th><th scope="col">Strikeouts</th><th scope="col">Walks</th></tr></thead><tbody>${rates}</tbody></table><p class="comparison-note"><strong>Recent changes versus current pitches (C − B).</strong><br>Strikeouts: ${central("k")}<br>Walks: ${central("bb")}<br><small>Estimate [95% pitcher-bootstrap interval]. Positive means C has higher loss.</small></p><p class="comparison-note"><strong>Experimental alerts:</strong> ${summary.alerts} total · ${summary.confirmed} confirmed · ${summary.false_alerts} false · ${summary.unresolved} unresolved. Unresolved alerts remain in the total.</p><p class="coverage-note">${number(season.rows)} eligible forecasts · ${number(report.test_rows)} with follow-up · ${number(season.watchlist.eligible_no_followup)} without follow-up. Training: ${state.season === "2025" ? "2021–2024, with settings frozen on 2024" : "2021–2023; settings selected on this 2024 validation"}. Study fingerprint: ${manifest.spec_sha256.slice(0,12)}.</p>`;
 }
 
+const METRIC_UNITS = { velocity_mph:["Velocity","mph"], hb_in:["Arm-side movement","in"], ivb_in:["Vertical movement","in"] };
+const STATUS_LABELS = { hidden:"Hidden", persisted:"Persisted", faded:"Faded", unresolved:"Unresolved" };
+const STATUS_BADGES = { persisted:"confirmed", faded:"false_alert", unresolved:"unresolved", hidden:"" };
+
+function renderTeams() {
+  if (!teamData) return;
+  const flags = teamFlags(teamData.flags,teamPage);
+  document.querySelectorAll("[data-team-page]").forEach(button => button.setAttribute("aria-pressed",String(button.dataset.teamPage === teamPage)));
+  const counts = flags.reduce((total,row) => { total[flagStatus(row,true)] += 1; return total; },{ persisted:0, faded:0, unresolved:0 });
+  $("#team-summary").textContent = `${TEAM_PAGES[teamPage]}: ${flags.length} flags across 2022–2024.` + (state.reveal ? ` ${counts.persisted} persisted, ${counts.faded} faded, ${counts.unresolved} unresolved.` : " Turn on Reveal outcomes to see what happened next.");
+  $("#team-body").innerHTML = flags.map(row => {
+    const [label,unit] = METRIC_UNITS[row.metric];
+    const status = flagStatus(row,state.reveal);
+    const interval = row.ci_low == null ? "no interval" : `${signed(row.ci_low)} to ${signed(row.ci_high)}`;
+    const next = status === "hidden" ? "Hidden" : `<span class="badge ${STATUS_BADGES[status]}">${STATUS_LABELS[status]}</span>${row.resolved ? `<small>${row.future.toFixed(1)} ${unit} · kept ${Math.round(row.retention * 100)}% of change</small>` : `<small>${row.future_outings} later outings</small>`}`;
+    const impact = row.impact_k == null ? `<span class="muted">Training year</span>` : `${signed(row.impact_k * 100,2)}pp K · ${signed(row.impact_bb * 100,2)}pp BB${state.reveal && row.y_bf ? `<small>Later ${pct(row.observed_k)} K · ${pct(row.observed_bb)} BB, ${number(row.y_bf)} BF</small>` : ""}`;
+    return `<tr><td>${dateLabel(row.forecast_date,true)}</td><td>${escape(displayName(row.name))}<small>${escape(row.pitch_type)} · ${label}</small></td><td>${signed(row.delta)} ${unit}<small>${row.baseline.toFixed(1)} → ${row.recent.toFixed(1)} · ${interval} · ${row.type_outings_recent}/${row.type_outings_baseline} outings</small></td><td>${signed(row.shrunk_delta)} ${unit}</td><td>${next}</td><td>${impact}</td></tr>`;
+  }).join("");
+}
+
 function render(push = false) {
   filtered = filterRows(rows,state);
   state.page = Math.max(0,Math.min(state.page,Math.ceil(filtered.length / PAGE_SIZE) - 1));
@@ -172,7 +200,7 @@ function render(push = false) {
     misses:"Largest absolute gap between B’s projected and observed K% minus BB%, with at least 50 future BF. Outcomes are revealed.",
   };
   $("#view-description").textContent = descriptions[state.view];
-  renderTable(); renderDetail(); renderStudy(); persist(push);
+  renderTable(); renderDetail(); renderStudy(); renderTeams(); persist(push);
 }
 
 function download(data,name) {
@@ -188,7 +216,8 @@ for (const [id,step] of [["previous-date",-1],["next-date",1]]) $( `#${id}`).add
 $("#outcomes").addEventListener("change",event => { state.reveal = event.target.checked; if (!state.reveal && state.view === "misses") { state.view = "all"; state.sort = "performance_rank"; state.direction = 1; } if (!state.reveal && state.sort === "observed_k_minus_bb") state.sort = "performance_rank"; state.page = 0; render(true); });
 $("#search").addEventListener("input",event => { state.query = event.target.value; state.page = 0; render(); });
 $("#role").addEventListener("change",event => { state.role = event.target.value; state.page = 0; render(true); });
-$("#clear-filters").addEventListener("click",() => { state.query = ""; state.role = "all"; state.page = 0; render(); $("#search").focus(); });
+$("#team").addEventListener("change",event => { state.team = event.target.value; state.page = 0; render(true); });
+$("#clear-filters").addEventListener("click",() => { state.query = ""; state.role = "all"; state.team = "all"; state.page = 0; render(); $("#search").focus(); });
 $("#retry").addEventListener("click",loadSeason);
 $("#detail").addEventListener("change",event => { if (event.target.id === "history-metric") { historyMetric = event.target.value; renderDetail(); } });
 $(".brand").addEventListener("click",event => { event.preventDefault(); state = readState(""); persist(true); loadSeason(); });
@@ -197,6 +226,8 @@ for (const [id,step] of [["previous-page",-1],["next-page",1]]) $(`#${id}`).addE
 document.addEventListener("click",async event => {
   const view = event.target.closest("[data-view]");
   if (view) { state.view = view.dataset.view; state.page = 0; state.at = null; state.sort = state.view === "misses" ? "error_pp" : state.view === "alerts" ? "forecast_date" : "performance_rank"; state.direction = state.view === "misses" ? -1 : 1; if (["alerts","misses"].includes(state.view)) state.date = ""; else if (!state.date) state.date = manifest.seasons[state.season].dates.at(-1); if (state.view === "misses") state.reveal = true; render(true); }
+  const teamButton = event.target.closest("[data-team-page]");
+  if (teamButton) { teamPage = teamButton.dataset.teamPage; renderTeams(); }
   const sort = event.target.closest("[data-sort]");
   if (sort) { const key = sort.dataset.sort; state.direction = state.sort === key ? -state.direction : ["name","performance_rank","forecast_date"].includes(key) ? 1 : -1; state.sort = key; state.page = 0; render(); }
   const pitcher = event.target.closest("[data-pitcher]");

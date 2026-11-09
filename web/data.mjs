@@ -16,6 +16,7 @@ export function filterRows(rows, state) {
     if (state.date && row.forecast_date !== state.date) return false;
     if (query && !normalizeSearch(displayName(row.name)).includes(query)) return false;
     if (state.role !== "all" && (row.start_share >= 0.5 ? "starter" : "reliever") !== state.role) return false;
+    if (state.team && state.team !== "all" && row.team !== state.team) return false;
     if (state.view === "watchlist" && !row.performance_watchlist) return false;
     if (state.view === "alerts" && !row.alert) return false;
     if (state.view === "misses" && row.y_bf < 50) return false;
@@ -58,7 +59,26 @@ export function readState(search) {
     pitcher: Number(p.get("pitcher")) || null, at: p.get("at"),
     view, reveal: p.get("outcomes") === "1" || view === "misses", query: p.get("q") || "",
     role: ["starter", "reliever"].includes(p.get("role")) ? p.get("role") : "all",
+    team: /^[A-Z]{2,3}$/.test(p.get("team") || "") ? p.get("team") : "all",
     sort: view === "misses" ? "error_pp" : view === "alerts" ? "forecast_date" : "performance_rank",
     direction: view === "misses" ? -1 : 1, page: 0,
   };
+}
+
+export const TEAM_PAGES = { DET:"Detroit Tigers", CIN:"Cincinnati Reds" };
+
+export function teamOptions(rows) {
+  return [...new Set(rows.map(row => row.team).filter(Boolean))].sort();
+}
+
+// Persistence uses the 30 days after the flag, so it stays hidden until outcomes are revealed.
+export function flagStatus(row, reveal) {
+  if (!reveal) return "hidden";
+  if (!row.resolved) return "unresolved";
+  return row.retention >= 0.5 ? "persisted" : "faded";
+}
+
+export function teamFlags(flags, team) {
+  return flags.filter(row => row.team === team)
+    .sort((a, b) => a.forecast_date.localeCompare(b.forecast_date) || a.pitcher - b.pitcher);
 }

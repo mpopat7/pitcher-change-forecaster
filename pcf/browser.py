@@ -48,6 +48,35 @@ def season_payload(watchlist, context, alerts):
     return payload
 
 
+TEAM_PAGES = ("DET", "CIN")
+REVIEW_CAPACITY = 0.1
+
+
+def team_flags(lists, measurements, predictions, outcomes):
+    """Every physical-list flag at 10% capacity for the team pages; selection uses no outcomes."""
+    flags = lists[(lists.method == "physical") & (lists.capacity == REVIEW_CAPACITY)
+                  & lists.team.isin(TEAM_PAGES)].copy()
+    keys = ["pitcher", "forecast_date", "pitch_type", "metric"]
+    extra = measurements[keys + ["ci_low", "ci_high", "type_outings_recent", "type_outings_baseline"]]
+    flags = flags.merge(extra, on=keys, how="left", validate="one_to_one")
+    impact = predictions[["pitcher", "forecast_date"]].copy()
+    for target in ("k", "bb"):
+        impact[f"impact_{target}"] = predictions[f"p_{target}_P"] - predictions[f"p_{target}_B"]
+    impact["p_k_B"], impact["p_bb_B"] = predictions.p_k_B, predictions.p_bb_B
+    flags = flags.merge(impact, on=["pitcher", "forecast_date"], how="left", validate="many_to_one")
+    flags = flags.merge(outcomes[["pitcher", "forecast_date", "y_bf", "y_k", "y_bb"]],
+                        on=["pitcher", "forecast_date"], how="left", validate="many_to_one")
+    flags["observed_k"] = flags.y_k.div(flags.y_bf.where(flags.y_bf > 0))
+    flags["observed_bb"] = flags.y_bb.div(flags.y_bf.where(flags.y_bf > 0))
+    flags = flags.sort_values(["team", "forecast_date", "pitcher"])
+    flags["forecast_date"] = flags.forecast_date.dt.strftime("%Y-%m-%d")
+    columns = ["team", "season", "forecast_date", "pitcher", "name", "pitch_type", "metric", "score",
+               "recent", "baseline", "delta", "ci_low", "ci_high", "shrunk_delta", "type_outings_recent",
+               "type_outings_baseline", "future", "future_outings", "resolved", "retention",
+               "impact_k", "impact_bb", "p_k_B", "p_bb_B", "y_bf", "observed_k", "observed_bb"]
+    return json.loads(flags[columns].to_json(orient="records", double_precision=10))
+
+
 def build(output=OUTPUT):
     load_frozen_spec()
     output = Path(output).resolve()
@@ -73,6 +102,16 @@ def build(output=OUTPUT):
             "report": json.loads((artifacts / f"report_{tag}.json").read_text()),
             "watchlist": json.loads((artifacts / f"watchlist_{tag}.json").read_text()),
         }
+    experiments = ROOT / "artifacts/experiments"
+    lists = pd.read_csv(experiments / "review_lists/lists.csv", parse_dates=["forecast_date"])
+    measurements = pd.read_parquet(experiments / "reliability/measurements.parquet")
+    predictions = pd.read_parquet(experiments / "forecast_value/predictions.parquet")
+    outcomes = pd.read_parquet(ROOT / "data/processed/forecast_rows.parquet",
+                               columns=["pitcher", "forecast_date", "y_bf", "y_k", "y_bb"],
+                               filters=[("season", "<=", 2024)])
+    teams = {"capacity": REVIEW_CAPACITY, "flags": team_flags(lists, measurements, predictions, outcomes)}
+    bundled["data/teams.json"] = teams
+    (data / "teams.json").write_text(json.dumps(teams, separators=(",", ":"), allow_nan=False))
     (data / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":"), allow_nan=False))
     for source in (ROOT / "web").iterdir():
         if source.is_file() and source.suffix in {".html", ".css", ".js", ".mjs"}:
