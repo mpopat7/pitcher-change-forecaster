@@ -8,7 +8,7 @@ This project uses public MLB Statcast data to compare forecasts based on past re
 
 The frozen specification was evaluated once on the 2025 holdout. Current pitch measurements modestly improve strikeout forecasts over the results-only baseline; adding recent-change features makes strikeout forecasts slightly worse and shows no clear walk benefit. A local historical forecast browser now covers every eligible 2024 and 2025 forecast, with pitch histories, model comparisons, and experimental alert outcomes. All 2020-2025 data is downloaded and passes the game-level audit.
 
-The per-type experiment measures 27,544 eligible development forecasts from 2021-2024, with sample counts and Detroit/Cincinnati examples. Reliability checks found poor interval calibration. A fixed comparison found that Welch-style t intervals improve some cases but leave substantial failures. Neither method establishes a reliable change alert. At equal review capacity, a shrunk physical-change list kept its recent level somewhat more often than raw velocity or usage lists in development, but a stricter pre-registered test on 2025-2026 did not replicate the velocity advantage, and movement added nothing beyond shrunk velocity. Shrinkage gives a small development gain for next-month velocity prediction; movement and usage gains remain uncertain. In 2023-2024 development folds, per-type change features, a simple velocity change, and a gradient-boosted model all left next-month K% and BB% forecasts statistically unchanged. A frozen 2026 test, scored once, gave the same answer: current pitch characteristics improved both strikeout and walk forecasts, while recent-change features did not. A swing-and-miss follow-up, overall and for the changed pitch itself, also found no measurable benefit. The original specification and saved results stay frozen.
+The per-type experiment measures 27,544 eligible development forecasts from 2021-2024, with sample counts and Detroit/Cincinnati examples. Reliability checks found poor interval calibration. A fixed comparison found that Welch-style t intervals improve some cases but leave substantial failures. Neither method establishes a reliable change alert. At equal review capacity, a shrunk physical-change list kept its recent level somewhat more often than raw velocity or usage lists in development, but a stricter pre-registered test on 2025-2026 did not replicate the velocity advantage, and movement added nothing beyond shrunk velocity. Shrinkage gives a small development gain for next-month velocity prediction; movement and usage gains remain uncertain. In 2023-2024 development folds, per-type change features, a simple velocity change, and a gradient-boosted model all left next-month K% and BB% forecasts statistically unchanged. A frozen 2026 test, scored once, gave the same answer: current pitch characteristics improved both strikeout and walk forecasts, while recent-change features did not. A swing-and-miss follow-up, overall and for the changed pitch itself, also found no measurable benefit. A pre-registered injured-list test found no measurable injury-warning value from recent changes either. The original specification and saved results stay frozen.
 
 ## Running it
 
@@ -392,6 +392,29 @@ Each pitcher's baseline outings are split alternately into halves A and B. Chang
 | Physical - raw usage | +16.5 pts (+9.6 to +23.7) | +12.6 pts (+5.1 to +20.0) |
 
 Values are differences in persisted / resolved with 95% pitcher-bootstrap intervals. Neither claim replicated. In 2025-2026 the physical list (81.0% persisted) was not measurably better than raw velocity alerts (78.8%), which held up much better than in development (70.8%). Movement added nothing beyond shrunk velocity in either period, so the earlier edge came from scaling velocity changes by their noise, and that edge did not survive a new period. The usage gap persisted, but it is a secondary comparison and partly a difference between metrics. Sharing the baseline had inflated persistence by about 5-8 points for every method. The retrospective replication at 10% gave the same answer (physical - raw velocity +3.2, -2.8 to +9.2). Rebuilt 2021-2024 measurements matched the development run exactly. Outputs are under `artifacts/experiments/detector_validation_dev/` and `artifacts/experiments/detector_validation_evaluation/`.
+
+### Injury warning
+
+Velocity loss is widely read as an injury sign, so a final pre-registered test asked whether recent pitch changes help predict a major-league injured-list placement. That target had not been examined in this project. The design is in [experiments/injury_warning.json](experiments/injury_warning.json):
+
+```bash
+uv run python3 -m pcf.injury_warning develop
+uv run python3 -m pcf.injury_warning freeze
+uv run python3 -m pcf.injury_warning download --seasons 2025 2026   # refused before the freeze
+uv run python3 -m pcf.injury_warning evaluate
+```
+
+Labels come from MLB Stats API transactions: placements on the 10-, 15- or 60-day injured list (not transfers or COVID-19 lists), dated by the retroactive date when one is given. Forecasts where the pitcher was already placed after his last appearance are removed. About 11% of forecasts are followed by a placement within 30 days. Model W uses the study's results, workload, schedule and current pitch features plus injury history (placements in the past year and the previous season); V adds the fastball velocity change; X adds every pitcher-level change feature (including release point, extension, spin and arm angle) and the per-type shrunk changes. Priors are fitted on the seasons each model is trained on, including during tuning. Settings were frozen from the 2024 development fold, and 2025-2026 transactions were downloaded only after the freeze commit.
+
+| Label | Comparison | Development 2023-2024 | Evaluation 2025-2026 |
+|---|---|---|---|
+| Placement in days 0-29 | X - W | +0.001213 (-0.000433 to +0.002974) | -0.000684 (-0.002483 to +0.000869) |
+| Placement in days 0-29 | V - W | +0.000298 (-0.000471 to +0.001150) | -0.000129 (-0.000306 to +0.000034) |
+| Placement in days 0-29 | X - V | +0.000914 (-0.000497 to +0.002311) | -0.000555 (-0.002345 to +0.001016) |
+| Placement in days 0-29 | NX - NW | -0.000529 (-0.001842 to +0.000716) | +0.000338 (-0.000591 to +0.001239) |
+| Placement in days 7-36 | X - W | -0.000933 (-0.003704 to +0.001774) | +0.000042 (-0.001625 to +0.001520) |
+
+Values are log-loss differences per forecast with 95% pitcher-bootstrap intervals; negative favors the first model. The pre-registered claim was not supported: no comparison excluded zero in either period, and the signs flip between periods. Injuries were hard to rank at all: the baseline's AUC was 0.55 in evaluation, and its top 10% of forecasts had a 16% placement rate against an 11% base rate. Change features moved neither number. Outputs are under `artifacts/experiments/injury_warning_dev/` and `artifacts/experiments/injury_warning_evaluation/`.
 
 ### Review notes
 
