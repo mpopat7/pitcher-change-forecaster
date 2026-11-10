@@ -2,20 +2,36 @@
 
 Do recent changes in a pitcher's repertoire improve forecasts of his performance over the next month?
 
-This project uses public MLB Statcast data to compare forecasts based on past results, current pitch characteristics, and recent changes in those characteristics. The pipeline produces a historical performance watchlist and an audit of experimental improvement and decline alerts.
+This project uses public MLB Statcast data (2020-2026, about 4.5 million pitches) to compare weekly forecasts built from past results, current pitch characteristics, and recent changes in those characteristics. Every test below fixed its design, features and settings in a committed freeze file before its evaluation data was scored, and each evaluation ran once.
 
-## Status
+## Answer
 
-The frozen specification was evaluated once on the 2025 holdout. Current pitch measurements modestly improve strikeout forecasts over the results-only baseline; adding recent-change features makes strikeout forecasts slightly worse and shows no clear walk benefit. A local historical forecast browser now covers every eligible 2024 and 2025 forecast, with pitch histories, model comparisons, and experimental alert outcomes. All 2020-2025 data is downloaded and passes the game-level audit.
+**No.** Across five pre-registered tests, recent pitch changes did not measurably improve forecasts. What did help, repeatedly, was a pitcher's *current* pitch characteristics: velocity, movement, usage, release and zone rate as they stand now.
 
-The per-type experiment measures 27,544 eligible development forecasts from 2021-2024, with sample counts and Detroit/Cincinnati examples. Reliability checks found poor interval calibration. A fixed comparison found that Welch-style t intervals improve some cases but leave substantial failures. Neither method establishes a reliable change alert. At equal review capacity, a shrunk physical-change list kept its recent level somewhat more often than raw velocity or usage lists in development, but a stricter pre-registered test on 2025-2026 did not replicate the velocity advantage, and movement added nothing beyond shrunk velocity. Shrinkage gives a small development gain for next-month velocity prediction; movement and usage gains remain uncertain. In 2023-2024 development folds, per-type change features, a simple velocity change, and a gradient-boosted model all left next-month K% and BB% forecasts statistically unchanged. A frozen 2026 test, scored once, gave the same answer: current pitch characteristics improved both strikeout and walk forecasts, while recent-change features did not. A swing-and-miss follow-up, overall and for the changed pitch itself, also found no measurable benefit. A pre-registered injured-list test found no measurable injury-warning value from recent changes either. The original specification and saved results stay frozen.
+| Test | Outcome forecast | Evaluation | Recent-change result | Section |
+|---|---|---|---|---|
+| Original frozen study | Next-30-day K%, BB% | 2025, once | Slightly worse for K%; no clear BB% benefit. Current pitch features improved K%. | [Final evaluation: 2025](#final-evaluation-2025) |
+| Per-type change features | Next-30-day K%, BB% | 2026, once | No improvement for either; slightly worse for BB% against a velocity-only model. Current pitch features improved both. | [Evaluate on a separate season](#evaluate-on-a-separate-season) |
+| Swing-and-miss follow-up | Whiffs per swing, overall and on the changed pitch | 2025-2026, once | No improvement. A cutter subgroup is an exploratory lead only. | [Swing-and-miss follow-up](#swing-and-miss-follow-up) |
+| Change-detector validation | Whether a flagged change lasts 30 days | 2025-2026, once | Did not beat raw velocity alerts; movement added nothing beyond noise-scaled velocity. | [Change-detector validation](#change-detector-validation) |
+| Injury warning | Injured-list placement within 30 days | 2025-2026, once | No improvement, with or without a one-week lead time. | [Injury warning](#injury-warning) |
+
+Side findings that held up:
+
+- Scaling a change by each pitcher's measurement noise (shrinkage) beats reading raw changes, but its advantage over raw velocity alerts did not survive a new period.
+- Judging persistence against the same baseline used to flag a change inflated persistence rates by about 5-8 points for every method.
+- Bootstrap intervals for pitch-type changes were poorly calibrated; Welch-style intervals helped only partly.
+
+An independent review (see [Review notes](#review-notes)) found no outcome leakage, confirmed every freeze preceded its evaluation, matched the reported numbers to saved outputs, and led to corrected wording and two documented tuning limitations.
+
+**Limits.** Public Statcast data has no biomechanics, intent, or private injury information, and minor-league injuries are invisible. The 2025-2026 K%, BB% and whiff outcomes were inspected before the later tests, so those seasons were fresh only for the persistence and injury outcomes. A null result here means recent changes add no signal that these models could measure, not that pitch changes never matter.
 
 ## Running it
 
 Requires [uv](https://docs.astral.sh/uv/). Downloaded data and outputs stay in the gitignored `data/` and `artifacts/` folders.
 
 ```bash
-uv run python3 -m pcf.ingest      # 2020 history plus 2021-2025; resumes saved chunks
+uv run python3 -m pcf.ingest      # 2020 history plus 2021-2026; resumes saved chunks
 uv run python3 -m pcf.audit --fetch-schedules  # compare chunks with completed MLB games
 uv run python3 -m pcf.dataset --through-season 2024
 uv run python3 -m pcf.support     # chronological repertoire-fallback checks on 2022 and 2023
