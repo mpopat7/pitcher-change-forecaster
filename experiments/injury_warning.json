@@ -1,0 +1,35 @@
+{
+  "experiment": "injury_warning_v1",
+  "purpose": "Test whether recent pitch changes help predict a major-league injured-list placement in the next 30 days, beyond current pitch characteristics, results, workload and injury history, and beyond a simple fastball velocity change.",
+  "population": "The study's eligible weekly forecast rows (data/processed/forecast_rows_2026.parquet), excluding rows where the pitcher was already placed on the injured list between his last appearance and the forecast date. No follow-up innings are required.",
+  "labels": {
+    "source": "MLB Stats API transactions (sportId 1), saved per season under data/raw/transactions/.",
+    "placement": "Descriptions matching 'placed ... on the 10-, 15- or 60-day injured list', excluding transfers and COVID-19 lists; records without a person id are dropped.",
+    "event_date": "The 'retroactive to' date in the description when present, otherwise the transaction date.",
+    "primary": "Any placement with event date 0-29 days after the forecast date.",
+    "lead_time_secondary": "Any placement 7-36 days after the forecast date, with rows that have a placement 0-6 days after the date removed."
+  },
+  "injury_history": "Count of placements in the 365 days before the forecast date and an indicator for any placement in the previous calendar season; part of every model.",
+  "models": {
+    "W": "Study B features (results history, workload, schedule, current pitch characteristics) plus injury history.",
+    "V": "W plus the fastball velocity change (chg_fb_velo).",
+    "X": "W plus every pitcher-level change feature (chg_*: usage, velocity, movement, spin, extension, release point, arm angle, zone rate) and the per-type shrunk change features from forecast_value_v1.",
+    "NW/NX": "Gradient-boosted trees on W and X features with the forecast_value_v1 fixed tree settings."
+  },
+  "priors": "Per-type physical-change priors are fitted on the seasons used to fit each model: the inner training seasons while tuning and the outer training seasons for the final fit.",
+  "tuning": "Logistic C from the study grid and boosted max_iter from [100, 200, 400], chosen by log loss on the inner validation season, then refit on all training seasons.",
+  "development_folds": [
+    {"train": [2021, 2022], "tune_train": [2021], "tune_valid": 2022, "test": 2023},
+    {"train": [2021, 2022, 2023], "tune_train": [2021, 2022], "tune_valid": 2023, "test": 2024}
+  ],
+  "evaluation": "Freeze after development. Download 2025-2026 transactions only after the freeze. Score 2025 (train 2021-2024) and 2026 (train 2021-2025) once, with each model's setting fixed at its 2024-fold choice.",
+  "comparisons": {"primary": ["X-W"], "secondary": ["V-W", "X-V", "NX-NW"]},
+  "claims": {
+    "changes_warn": "Supported when the pooled 2025-2026 X-W log-loss difference interval lies below zero for the primary label.",
+    "otherwise": "Reported as not supported, or as harmful when the interval lies above zero."
+  },
+  "scoring": "Bernoulli log loss per forecast; pitcher-cluster bootstrap with 1000 draws. Descriptive: AUC and the placement rate among each model's top 10% of forecasts.",
+  "limits": "Strikeout, walk and whiff outcomes for 2025-2026 were already inspected; injured-list outcomes were not. Minor-league injuries, option assignments and unreported injuries are invisible. Overlapping weekly rows share events, handled by clustering on pitcher.",
+  "seed": 20261110,
+  "stop_rule": "Run development once, freeze, score the evaluation once. Report every comparison and both labels regardless of direction; no feature, label or tuning changes after results."
+}

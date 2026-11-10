@@ -1,0 +1,36 @@
+{
+  "frozen_at_utc": "2026-11-10T07:36:31+00:00",
+  "settings": {
+    "primary": {
+      "W": 0.003,
+      "V": 0.003,
+      "X": 0.001,
+      "NW": 100,
+      "NX": 100
+    },
+    "lead_time": {
+      "W": 0.003,
+      "V": 0.003,
+      "X": 0.001,
+      "NW": 100,
+      "NX": 100
+    }
+  },
+  "settings_source": "development fold testing 2024",
+  "source_sha256": {
+    "pcf/injury_warning.py": "0ea1ed8250e6230ad2c9df6eb0c314b6644fad85e216f6902d65c4c1a886cb4e",
+    "pcf/forecast_value.py": "5501840cece8e97d677bccc7724f709eef8b0d0806e7e601892e6dfc1faf12a9",
+    "pcf/evaluate_2026.py": "f107299dbf77e3b1ddc19e6fb262ff39c2f32fbcb7070bc9762d5b0753d90d79",
+    "pcf/model.py": "ef2a402a3e9fe3d6fb957e162e7505699caf307d24b61ebb900bcaefe8411eb8",
+    "pcf/changes.py": "987196019fc7f3e9d6eb7f81a1b64989e33b4696fcbe527859764338c98b3b41",
+    "pcf/dataset.py": "c488503dbd9184c4c83b86ebfdb681e5461b19ee715c502023291d41e4e2e905",
+    "pcf/freeze.py": "7f3bdbfdc9c988e6594db1915242f692977d183ef873047dd6c8b43999f596e9",
+    "experiments/injury_warning.json": "811b9966299ad477ddf4704fe78f40e66ee107cfc98ec0f2a4d8991f208a33a0",
+    "experiments/forecast_value.json": "41d2b8d467321dba17aa69b0b1970f09a2a06c4b65915b8b48d801eadfbf7938",
+    "pyproject.toml": "3a0c691debded60ed428731ccc190f4bed54c4be6acf0d9c6de0ef7cc8fd7eb8",
+    "uv.lock": "81b34145b082d6f52972f91c4efa966a6778e912c285c3471840b7a3382e4325",
+    "research_spec.json": "b2038e9abd9b586b5621536b07528bb834de05d3af9da06968fa36c4a653cb91",
+    "artifacts/experiments/per_type_changes/changes.parquet": "4530624c5cc96157967a65a5bf08572574b4b156749abc343177897347d40511"
+  },
+  "development_report_sha256": "bfe24cbe7ea73f504016bbdef1974198265a9acd55eb4fd4208293f6a3cf86c5"
+}
