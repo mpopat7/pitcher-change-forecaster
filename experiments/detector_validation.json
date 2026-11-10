@@ -1,0 +1,38 @@
+{
+  "experiment": "detector_validation_v1",
+  "purpose": "Test whether the physical change score finds pitch changes that last, compared with velocity alerts, under three corrections to review_lists_v1: thresholds set from earlier seasons only, a split baseline so that selection noise cannot inflate persistence, and a shrunk velocity-only control that isolates what the movement metrics add.",
+  "population": "Study-eligible pitcher forecast dates (pcf.changes.eligible_forecasts). Each pitcher's first eligible date in a season, then dates at least 30 days apart (pcf.reliability.select_anchors).",
+  "windows": "Recent: the 30 days before the forecast date. Baseline: 30-120 days before, or the prior season when that window has fewer than two outings (as pcf.changes.build_changes).",
+  "split_baseline": "Baseline outings are ordered by date and game id and alternately assigned to half A (1st, 3rd, ...) and half B (2nd, 4th, ...). Selection uses recent minus A only. Persistence is judged against B only.",
+  "support": "Known pitch label, finite change, and at least two outings with that type in the recent window, in half A and in half B.",
+  "noise_variance": "Bootstrap variance over outings (200 draws) of the recent mean plus that of the half-A mean.",
+  "priors": "For season s, zero-centered prior variance per metric and pitch type = max(mean(change^2 - noise variance), 0) over supported rows from 2021 through s-1; the metric-wide pool is used when fewer than two pitchers have that type. Shrunk change = change x prior / (prior + noise).",
+  "methods": {
+    "physical": "Max over velocity, horizontal and vertical movement of |shrunk change| / sqrt(prior variance); prior variance must be positive.",
+    "velocity_shrunk": "The same score restricted to velocity.",
+    "velocity_raw": "Max |raw velocity change| in mph across pitch types.",
+    "usage_raw": "Max |raw usage change| across pitch types."
+  },
+  "anchor_score": "Each anchor takes its single strongest eligible signal under each method; ties break by pitcher id, then pitch type and metric alphabetically.",
+  "prospective_flags": "For season s and capacity c, each method's cutoff is the score ranked round(c x N) among that method's anchor scores in seasons 2022 through s-1, where N counts all anchors in those seasons. Anchors in season s at or above the cutoff are flagged. Flag counts can differ by method and are reported.",
+  "retrospective_flags": "Secondary replication of review_lists_v1: the top round(c x anchors) scores in each season.",
+  "capacities": {"primary": 0.10, "secondary": [0.05]},
+  "resolution": "Physical metrics resolve when the triggering type has at least two outings with that measurement in days 0-29 after the forecast date, same season. Usage resolves when the pitcher has at least two outings in that period; an absent type counts as zero usage.",
+  "persistence": "With s = sign(recent - A), persisted when (recent - B) x s > 0 and (future - B) x s >= 0.5 x (recent - B) x s. A resolved flag whose recent level is not on the changed side of B counts as not persisted.",
+  "diagnostic": "Persistence against half A (the review_lists_v1 shared-baseline rule) is also reported to show how much shared noise inflated earlier rates.",
+  "rates": {"primary": "persisted / resolved", "secondary": "persisted / flagged, with unresolved counted as not persisted"},
+  "comparisons": {
+    "primary": ["physical - velocity_raw", "physical - velocity_shrunk"],
+    "secondary": ["physical - usage_raw"]
+  },
+  "claims": {
+    "beats_velocity_alerts": "Supported when the pooled evaluation physical - velocity_raw interval at 10% prospective capacity lies above zero.",
+    "movement_adds": "Supported when the pooled evaluation physical - velocity_shrunk interval at 10% prospective capacity lies above zero.",
+    "otherwise": "Reported as not replicated (interval includes zero) or reversed (interval below zero)."
+  },
+  "uncertainty": "Pitcher-cluster bootstrap with 2000 draws over the fixed flags, pooled across evaluation seasons; per-season rows are descriptive.",
+  "development": "Prospective seasons 2023-2024 (cutoffs from 2022, then 2022-2023); retrospective 2022-2024. Raw data after 2024 is not read. Used to check the code and size the evaluation only; no settings are chosen from it.",
+  "evaluation": "Prospective seasons 2025 (cutoffs from 2022-2024, priors from 2021-2024) and 2026 (cutoffs from 2022-2025, priors from 2021-2025). Earlier studies computed 2025-2026 change scores and inspected strikeout, walk and whiff outcomes, but never next-30-day pitch measurements, so persistence there is unseen.",
+  "seed": 20261110,
+  "stop_rule": "Run development once, freeze sources, design and development report, then score the evaluation once. Report both claims and every secondary row regardless of direction. No capacity, threshold, window or method changes after evaluation."
+}

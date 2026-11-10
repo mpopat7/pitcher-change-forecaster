@@ -1,0 +1,15 @@
+{
+  "frozen_at_utc": "2026-11-10T07:23:43.867502+00:00",
+  "source_sha256": {
+    "pcf/detector_validation.py": "56c9abf3dee87c24726cf48feff325112a9a727c667651a14ba06f9822779655",
+    "pcf/changes.py": "987196019fc7f3e9d6eb7f81a1b64989e33b4696fcbe527859764338c98b3b41",
+    "pcf/reliability.py": "d8ef8e0197282e8d5cf848e2a9c189339c5e758feea12cd600d57b0b0a98a9d8",
+    "pcf/dataset.py": "c488503dbd9184c4c83b86ebfdb681e5461b19ee715c502023291d41e4e2e905",
+    "pcf/freeze.py": "7f3bdbfdc9c988e6594db1915242f692977d183ef873047dd6c8b43999f596e9",
+    "experiments/detector_validation.json": "fa1ca26f123197dc6fa5a88ceb70ba86e0f478d2b09339f0e9d4f6a0eec87f33",
+    "pyproject.toml": "3a0c691debded60ed428731ccc190f4bed54c4be6acf0d9c6de0ef7cc8fd7eb8",
+    "uv.lock": "81b34145b082d6f52972f91c4efa966a6778e912c285c3471840b7a3382e4325",
+    "research_spec.json": "b2038e9abd9b586b5621536b07528bb834de05d3af9da06968fa36c4a653cb91"
+  },
+  "development_report_sha256": "5caa25d1a125a61cafff03f30e058b886ce9279f0497d40e5c621fa48cff4a2d"
+}
